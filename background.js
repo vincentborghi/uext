@@ -56,7 +56,8 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
         notes: "Captured from: " + (tab ? tab.title : ""),
         links: {},
         coverUrl: "",
-        createdAt: Date.now()
+        createdAt: Date.now(),
+        updatedAt: Date.now()
       };
       chrome.storage.local.get({ musicLibrary: [] }, (res) => {
         const list = res.musicLibrary || [];

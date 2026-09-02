@@ -138,7 +138,8 @@ function setupFipModule() {
       notes: notes,
       coverUrl: currentFipTrack.coverUrl || "",
       links: currentFipTrack.links || {},
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      updatedAt: Date.now()
     };
 
     saveTrackToLibrary(trackToSave);
@@ -380,6 +381,8 @@ function filterAndRenderLibrary() {
       .join(" ");
 
     const links = track.links || generateSearchLinks(track.artist, track.title);
+    const createdStr = track.createdAt ? new Date(track.createdAt).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" }) : "";
+    const updatedStr = (track.updatedAt && track.updatedAt !== track.createdAt) ? new Date(track.updatedAt).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" }) : "";
 
     card.innerHTML = `
       <div class="d-flex justify-content-between align-items-start mb-1">
@@ -393,6 +396,10 @@ function filterAndRenderLibrary() {
         </div>
       </div>
       ${track.notes ? `<div class="small text-muted mb-1 fst-italic">"${escapeHtml(track.notes)}"</div>` : ""}
+      <div class="d-flex justify-content-between align-items-center text-muted mb-1" style="font-size:0.7rem;">
+        <span>📅 ${createdStr ? `Added: ${createdStr}` : ""}</span>
+        ${updatedStr ? `<span>✏️ Mod: ${updatedStr}</span>` : ""}
+      </div>
       <div class="d-flex flex-wrap gap-1 align-items-center justify-content-between mt-1 pt-1 border-top">
         <div class="d-flex flex-wrap gap-1 align-items-center">
           ${tagBadges}
@@ -466,7 +473,12 @@ function handleModalSave() {
     return;
   }
 
-  const id = document.getElementById("modal-track-id").value || ("trk_" + Date.now() + "_" + Math.floor(Math.random() * 1000));
+  const existingId = document.getElementById("modal-track-id").value;
+  const existingTrack = existingId ? currentLibrary.find((t) => t.id === existingId) : null;
+  const id = existingId || ("trk_" + Date.now() + "_" + Math.floor(Math.random() * 1000));
+  const createdAt = existingTrack?.createdAt || Date.now();
+  const updatedAt = Date.now();
+
   const album = document.getElementById("modal-track-album").value.trim();
   const year = document.getElementById("modal-track-year").value.trim();
   const origin = document.getElementById("modal-track-origin").value.trim() || "Manual";
@@ -488,7 +500,8 @@ function handleModalSave() {
     rating,
     notes,
     links: generateSearchLinks(artist, title),
-    createdAt: Date.now()
+    createdAt: createdAt,
+    updatedAt: updatedAt
   };
 
   saveTrackToLibrary(track);
@@ -504,7 +517,7 @@ function exportLibraryAsJson() {
 }
 
 function exportLibraryAsCsv() {
-  const headers = ["ID", "Title", "Artist", "Album", "Year", "Origin", "Rating", "Tags", "Notes", "CreatedAt"];
+  const headers = ["ID", "Title", "Artist", "Album", "Year", "Origin", "Rating", "Tags", "Notes", "CreatedAt", "UpdatedAt"];
   const rows = currentLibrary.map((t) => [
     t.id,
     `"${(t.title || "").replace(/"/g, '""')}"`,
@@ -515,7 +528,8 @@ function exportLibraryAsCsv() {
     t.rating || 0,
     `"${(t.tags || []).join(",")}"`,
     `"${(t.notes || "").replace(/"/g, '""')}"`,
-    t.createdAt || ""
+    t.createdAt ? `"${new Date(t.createdAt).toISOString()}"` : "",
+    t.updatedAt ? `"${new Date(t.updatedAt).toISOString()}"` : (t.createdAt ? `"${new Date(t.createdAt).toISOString()}"` : "")
   ]);
 
   const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
@@ -543,6 +557,8 @@ function handleImportJson(event) {
           );
           if (!exists) {
             if (!item.id) item.id = "trk_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+            if (!item.createdAt) item.createdAt = Date.now();
+            if (!item.updatedAt) item.updatedAt = item.createdAt;
             currentLibrary.push(item);
             addedCount++;
           }
