@@ -740,7 +740,7 @@ PAGE TITLE: ${pageData.title || tab.title || ""}
 PAGE URL: ${tab.url || ""}
 PAGE CONTENT:
 """
-${textSample.substring(0, 16000)}
+${textSample.substring(0, 8000).replace(/[ \t]+/g, " ")}
 """
 
 REQUIREMENTS:
@@ -770,20 +770,42 @@ JSON FORMAT:
   ]
 }`;
 
-    // Discover all available models dynamically on user account
-    let candidateModels = await getAllAvailableGeminiModels(apiKey);
-    if (!candidateModels || candidateModels.length === 0) {
-      candidateModels = ["gemini-3.6-flash", "gemini-3.6-pro", "gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-1.5-flash"];
+    // 1. Check if we already have a cached working model
+    const { lastWorkingGeminiModel } = await chrome.storage.local.get({ lastWorkingGeminiModel: "" });
+    let aiResponse = null;
+    let successfulModel = null;
+
+    if (lastWorkingGeminiModel) {
+      aiResponse = await callGeminiApi(apiKey, lastWorkingGeminiModel, aiPrompt, 1);
+      if (aiResponse) {
+        successfulModel = lastWorkingGeminiModel;
+      }
     }
 
-    let aiResponse = null;
-    for (const model of candidateModels) {
-      aiResponse = await callGeminiApi(apiKey, model, aiPrompt, 2);
-      if (aiResponse) break;
+    // 2. If no cached model worked, discover and iterate candidates
+    if (!aiResponse) {
+      let candidateModels = await getAllAvailableGeminiModels(apiKey);
+      if (!candidateModels || candidateModels.length === 0) {
+        candidateModels = ["gemini-3.6-flash", "gemini-3.6-pro", "gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-flash"];
+      }
+
+      for (const model of candidateModels) {
+        if (model === lastWorkingGeminiModel) continue;
+        aiResponse = await callGeminiApi(apiKey, model, aiPrompt, 1);
+        if (aiResponse) {
+          successfulModel = model;
+          break;
+        }
+      }
+    }
+
+    if (successfulModel) {
+      // Cache the working model for instant future calls (1-2s response time)
+      chrome.storage.local.set({ lastWorkingGeminiModel: successfulModel });
     }
 
     if (!aiResponse) {
-      throw new Error("Gemini API is currently busy or unavailable. Please retry in a moment.");
+      throw new Error("Gemini API is currently busy. Please retry in a moment.");
     }
 
     const aiData = JSON.parse(aiResponse);
