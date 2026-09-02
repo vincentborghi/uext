@@ -656,12 +656,20 @@ function setupEventsModule() {
   const debugToggle = document.getElementById("ai-debug-toggle");
   const debugClearBtn = document.getElementById("ai-debug-clear-btn");
 
+  // Default Calendar ID for "Interesting" agenda
+  const DEFAULT_CALENDAR_ID = "";
+
   // Load saved Gemini API Key & Target Calendar
-  chrome.storage.local.get({ geminiApiKey: "", targetCalendarId: "Interesting", showAiDebugLog: false }, (res) => {
+  chrome.storage.local.get({ geminiApiKey: "", targetCalendarId: DEFAULT_CALENDAR_ID, showAiDebugLog: false }, (res) => {
     const key = res.geminiApiKey || "";
     if (geminiKeyInput) geminiKeyInput.value = key;
     updateGeminiStatusBadge(key);
-    if (targetCalInput) targetCalInput.value = res.targetCalendarId || "Interesting";
+    
+    let savedCal = res.targetCalendarId;
+    if (!savedCal || savedCal === "Interesting") savedCal = DEFAULT_CALENDAR_ID;
+    if (targetCalInput) targetCalInput.value = savedCal;
+    chrome.storage.local.set({ targetCalendarId: savedCal });
+
     if (debugToggle) {
       debugToggle.checked = Boolean(res.showAiDebugLog);
       toggleDebugConsoleVisibility(debugToggle.checked);
