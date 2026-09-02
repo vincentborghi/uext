@@ -1,0 +1,110 @@
+/* Styles for SwissKnife Chrome Extension Popup */
+
+:root {
+  --primary-color: #4f46e5;
+  --primary-hover: #4338ca;
+  --bg-subtle: #f8fafc;
+}
+
+body {
+  width: 440px;
+  height: 560px;
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  overflow: hidden;
+  user-select: none;
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.app-header {
+  height: 44px;
+}
+
+.main-view {
+  flex: 1;
+  max-height: calc(560px - 44px - 42px);
+  overflow-y: auto;
+}
+
+/* Nav Pills */
+.nav-pills .nav-link {
+  color: #4b5563;
+  font-weight: 500;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.nav-pills .nav-link.active {
+  background-color: var(--primary-color);
+  color: #ffffff;
+}
+
+/* Star Rating Widget */
+.star-rating {
+  font-size: 1.25rem;
+  color: #cbd5e1;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.star-rating .star-item {
+  transition: color 0.15s ease;
+}
+
+.star-rating .star-item.active {
+  color: #f59e0b;
+}
+
+.star-rating .star-item:hover,
+.star-rating .star-item:hover ~ .star-item {
+  color: #fbbf24;
+}
+
+/* Track Card in Library */
+.track-card {
+  border-left: 3px solid var(--primary-color);
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.track-card:hover {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.tag-badge {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.4rem;
+  background-color: #e2e8f0;
+  color: #334155;
+  border-radius: 4px;
+  text-decoration: none;
+}
+
+.origin-badge {
+  font-size: 0.68rem;
+  padding: 0.12rem 0.35rem;
+}
+
+/* Scrollbar customization */
+.main-view::-webkit-scrollbar {
+  width: 6px;
+}
+.main-view::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+.main-view::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+.main-view::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.cursor-pointer {
+  cursor: pointer;
+}
