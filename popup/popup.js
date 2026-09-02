@@ -646,10 +646,215 @@ function downloadBlob(content, filename, contentType) {
 // 3. SPECTACLES & CALENDAR MODULE
 function setupEventsModule() {
   const scanBtn = document.getElementById("events-scan-tab-btn");
+  const aiScanBtn = document.getElementById("events-ai-scan-btn");
   const openSelectedBtn = document.getElementById("events-open-selected-btn");
+  const geminiKeyInput = document.getElementById("gemini-api-key-input");
+  const geminiSaveKeyBtn = document.getElementById("gemini-save-key-btn");
+  const geminiSavedMsg = document.getElementById("gemini-key-saved-msg");
+  const geminiStatusBadge = document.getElementById("gemini-status-badge");
 
-  scanBtn.addEventListener("click", scanCurrentPageForDates);
-  openSelectedBtn.addEventListener("click", openSelectedDatesInCalendar);
+  // Load saved Gemini API Key
+  chrome.storage.local.get({ geminiApiKey: "" }, (res) => {
+    const key = res.geminiApiKey || "";
+    if (geminiKeyInput) geminiKeyInput.value = key;
+    updateGeminiStatusBadge(key);
+  });
+
+  if (geminiSaveKeyBtn) {
+    geminiSaveKeyBtn.addEventListener("click", () => {
+      const keyVal = geminiKeyInput.value.trim();
+      chrome.storage.local.set({ geminiApiKey: keyVal }, () => {
+        updateGeminiStatusBadge(keyVal);
+        if (geminiSavedMsg) {
+          geminiSavedMsg.classList.remove("d-none");
+          setTimeout(() => geminiSavedMsg.classList.add("d-none"), 2000);
+        }
+      });
+    });
+  }
+
+  if (aiScanBtn) {
+    aiScanBtn.addEventListener("click", scanCurrentPageWithGeminiAI);
+  }
+
+  if (scanBtn) {
+    scanBtn.addEventListener("click", scanCurrentPageForDates);
+  }
+
+  if (openSelectedBtn) {
+    openSelectedBtn.addEventListener("click", openSelectedDatesInCalendar);
+  }
+}
+
+function updateGeminiStatusBadge(key) {
+  const badge = document.getElementById("gemini-status-badge");
+  if (!badge) return;
+  if (key && key.length > 5) {
+    badge.textContent = "AI Ready (Gemini)";
+    badge.className = "badge bg-success";
+  } else {
+    badge.textContent = "Key not configured";
+    badge.className = "badge bg-secondary";
+  }
+}
+
+async function scanCurrentPageWithGeminiAI() {
+  const listContainer = document.getElementById("events-list-container");
+  const eventTitleInput = document.getElementById("event-input-title");
+  const eventLocationInput = document.getElementById("event-input-location");
+
+  const storageRes = await chrome.storage.local.get({ geminiApiKey: "" });
+  const apiKey = (storageRes.geminiApiKey || "").trim();
+
+  if (!apiKey) {
+    const collapseEl = document.getElementById("gemini-settings-collapse");
+    if (collapseEl && window.bootstrap && window.bootstrap.Collapse) {
+      bootstrap.Collapse.getOrCreateInstance(collapseEl).show();
+    }
+    listContainer.innerHTML = `<div class="text-warning small text-center py-2">Please configure your Google Gemini API key above to use AI Smart Scan.</div>`;
+    return;
+  }
+
+  listContainer.innerHTML = `<div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> Analyzing page with Google Gemini AI...</div>`;
+
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab) throw new Error("No active tab");
+
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: runSmartPageExtractor
+    });
+
+    const pageData = results?.[0]?.result || {};
+    const textSample = pageData.sample || "";
+
+    if (!textSample || textSample.length < 10) {
+      throw new Error("No readable text found on page.");
+    }
+
+    const aiPrompt = `You are an expert AI assistant that parses concert, theater, spectacles, and events from web pages.
+Extract the exact details from the following web page and return ONLY a strict JSON object.
+
+PAGE TITLE: ${pageData.title || tab.title || ""}
+PAGE URL: ${tab.url || ""}
+PAGE CONTENT:
+"""
+${textSample.substring(0, 16000)}
+"""
+
+REQUIREMENTS:
+1. "event_title": Formatted clean title like "Concert <Artist/Show> / <City or Venue>". Example: "Concert Rodolphe Burger / Fontaine". Never use website domain.
+2. "artist": Name of the main performer, band, or show title.
+3. "venue": Specific venue or hall name (e.g. "La Source - Grande Salle").
+4. "city": City or town (e.g. "Fontaine").
+5. "location": Combined formatted string, e.g. "Fontaine (La Source - Grande Salle)".
+6. "events": Array of all performance dates and times found on this page. For each event:
+   - "label": Readable date (e.g. "jeu. 8 octobre 2026").
+   - "start_iso": Exact local datetime in ISO 8601 format: "YYYY-MM-DDTHH:mm:ss" (e.g. "2026-10-08T20:30:00"). If start hour is not specified, default to 20:00:00.
+   - "end_iso": Exact local end datetime in ISO 8601 format: "YYYY-MM-DDTHH:mm:ss" (usually start + 2 hours).
+
+JSON FORMAT:
+{
+  "event_title": "string",
+  "artist": "string",
+  "venue": "string",
+  "city": "string",
+  "location": "string",
+  "events": [
+    {
+      "label": "string",
+      "start_iso": "string",
+      "end_iso": "string"
+    }
+  ]
+}`;
+
+    // Try Gemini 2.0 Flash then 1.5 Flash
+    let aiResponse = await callGeminiApi(apiKey, "gemini-2.0-flash", aiPrompt);
+    if (!aiResponse) {
+      aiResponse = await callGeminiApi(apiKey, "gemini-1.5-flash", aiPrompt);
+    }
+
+    if (!aiResponse) {
+      throw new Error("Invalid or empty response from Gemini API. Check your API key.");
+    }
+
+    const aiData = JSON.parse(aiResponse);
+
+    if (aiData.event_title) eventTitleInput.value = aiData.event_title;
+    if (aiData.location) eventLocationInput.value = aiData.location;
+
+    detectedEvents = [];
+    let eventIdx = 0;
+
+    if (Array.isArray(aiData.events) && aiData.events.length > 0) {
+      aiData.events.forEach((evt) => {
+        try {
+          const startDate = new Date(evt.start_iso);
+          if (!isNaN(startDate.getTime())) {
+            let endDate = evt.end_iso ? new Date(evt.end_iso) : null;
+            if (!endDate || isNaN(endDate.getTime())) {
+              endDate = new Date(startDate.getTime() + 2 * 3600 * 1000);
+            }
+            const label = evt.label || startDate.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long", year: "numeric" });
+            detectedEvents.push({
+              id: "evt_ai_" + eventIdx++,
+              label: label,
+              start: startDate,
+              end: endDate,
+              raw: evt.start_iso
+            });
+          }
+        } catch (e) {}
+      });
+    }
+
+    if (detectedEvents.length === 0) {
+      detectedEvents = extractDatesFromMetadata(pageData);
+    }
+
+    renderDetectedDates();
+  } catch (err) {
+    listContainer.innerHTML = `<div class="text-danger small text-center py-2">AI Scan Error: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+async function callGeminiApi(apiKey, modelName, promptText) {
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: promptText }]
+          }
+        ],
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.1
+        }
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error(`Gemini API error (${modelName}):`, errText);
+      return null;
+    }
+
+    const json = await response.json();
+    const textContent = json.candidates?.[0]?.content?.parts?.[0]?.text;
+    return textContent ? textContent.trim() : null;
+  } catch (e) {
+    console.error(`Gemini API call failed for ${modelName}:`, e);
+    return null;
+  }
 }
 
 async function scanCurrentPageForDates() {

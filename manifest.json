@@ -14,7 +14,8 @@
     "https://api.radiofrance.fr/*",
     "https://www.radiofrance.fr/*",
     "https://openapi.radiofrance.fr/*",
-    "https://acces-distant.bnf.fr/*"
+    "https://acces-distant.bnf.fr/*",
+    "https://generativelanguage.googleapis.com/*"
   ],
   "action": {
     "default_popup": "popup/popup.html",
