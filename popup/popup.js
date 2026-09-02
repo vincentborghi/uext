@@ -86,7 +86,7 @@ async function loadActiveTabInfo() {
           // Fallback simple title
           const eventTitleEl = document.getElementById("event-input-title");
           if (eventTitleEl && !eventTitleEl.value && tab.title) {
-            const cleanTitle = tab.title.replace(/\s*[-–|].*$/, "").trim();
+            const cleanTitle = tab.title.replace(/\s*[\-\u2013|].*$/, "").replace(/^concert\s*[:\-]?\s*/i, "").trim();
             eventTitleEl.value = cleanTitle || tab.title;
           }
         }
@@ -932,7 +932,7 @@ REQUIREMENTS:
 1. "event_type": Type of event: "Theatre", "Concert", "Opera", "Dance", "Comedy", "Conference", "Festival", "Exposition", or "Spectacle".
 2. "event_title": Short clean title formatted according to the event type:
    - Theater/Play: "Theatre : <Play Name> / <City>" (or "<Play Name> / <City>")
-   - Concert/Music: "Concert <Artist/Band> / <City>"
+   - Concert/Music: "<Artist/Band> / <City>" (NEVER prefix with "Concert", start directly with the artist or band name)
    - Opera: "Opera : <Opera Name> / <City>"
    - Dance/Ballet: "Dance : <Show Name> / <City>"
    - Comedy: "Spectacle <Artist> / <City>"
@@ -1010,7 +1010,14 @@ JSON FORMAT:
 
     const aiData = JSON.parse(aiResponse);
 
-    if (aiData.event_title) eventTitleInput.value = aiData.event_title;
+    if (aiData.event_title) {
+      let cleanTitle = aiData.event_title.trim();
+      const isConcert = (aiData.event_type && aiData.event_type.toLowerCase().includes("concert")) || /^concert\b/i.test(cleanTitle);
+      if (isConcert) {
+        cleanTitle = cleanTitle.replace(/^concert\s*[:\-]?\s*/i, "").trim();
+      }
+      eventTitleInput.value = cleanTitle;
+    }
     if (aiData.location) eventLocationInput.value = aiData.location;
 
     detectedEvents = [];
@@ -1362,12 +1369,12 @@ function runSmartPageExtractor(forceIgnoreSelection = false) {
     if (cleanRemainder.length >= 3 && cleanRemainder.length <= 120 && !isGarbage(cleanRemainder)) {
       const parts = cleanRemainder.split(/\s*[\-\u2013\u2014|/\u2022]\s*/).filter(Boolean);
       if (parts.length >= 2) {
-        data.title = parts[0].trim();
-        data.artist = parts[0].trim();
+        data.title = parts[0].trim().replace(/^concert\s*[:\-]?\s*/i, "");
+        data.artist = data.title;
         data.location = parts.slice(1).join(" - ").trim();
       } else {
-        data.title = cleanRemainder;
-        data.artist = cleanRemainder;
+        data.title = cleanRemainder.replace(/^concert\s*[:\-]?\s*/i, "");
+        data.artist = data.title;
       }
     }
   }
@@ -1408,7 +1415,8 @@ function runSmartPageExtractor(forceIgnoreSelection = false) {
   } else if (lowerContext.includes("conference") || lowerContext.includes("debat")) {
     prefix = "Conference : ";
   } else if (lowerContext.includes("concert") || lowerContext.includes("musique") || lowerContext.includes("album") || lowerContext.includes("tournee") || lowerContext.includes("live") || lowerContext.includes("orchestre")) {
-    prefix = "Concert ";
+    // For concerts, do not prefix with "Concert", start directly with artist name
+    prefix = "";
   }
 
   // 7. Build clean smart title
@@ -1680,7 +1688,7 @@ function openSelectedDatesInCalendar() {
 }
 
 function openGoogleCalendarForEvents(eventList) {
-  const baseTitle = document.getElementById("event-input-title").value.trim() || "Concert / Spectacle";
+  const baseTitle = document.getElementById("event-input-title").value.trim() || "Spectacle / Event";
   const location = document.getElementById("event-input-location").value.trim();
   const calendarTarget = document.getElementById("event-input-calendar").value.trim();
   const sourceUrl = activeTabInfo ? activeTabInfo.url : "";
