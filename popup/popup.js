@@ -653,12 +653,21 @@ function setupEventsModule() {
   const geminiSavedMsg = document.getElementById("gemini-key-saved-msg");
   const geminiStatusBadge = document.getElementById("gemini-status-badge");
 
-  // Load saved Gemini API Key
-  chrome.storage.local.get({ geminiApiKey: "" }, (res) => {
+  // Load saved Gemini API Key & Target Calendar
+  const targetCalInput = document.getElementById("event-input-calendar");
+
+  chrome.storage.local.get({ geminiApiKey: "", targetCalendarId: "Interesting" }, (res) => {
     const key = res.geminiApiKey || "";
     if (geminiKeyInput) geminiKeyInput.value = key;
     updateGeminiStatusBadge(key);
+    if (targetCalInput) targetCalInput.value = res.targetCalendarId || "Interesting";
   });
+
+  if (targetCalInput) {
+    targetCalInput.addEventListener("change", () => {
+      chrome.storage.local.set({ targetCalendarId: targetCalInput.value.trim() });
+    });
+  }
 
   if (geminiSaveKeyBtn) {
     geminiSaveKeyBtn.addEventListener("click", () => {
@@ -1331,19 +1340,24 @@ function openSelectedDatesInCalendar() {
 function openGoogleCalendarForEvents(eventList) {
   const baseTitle = document.getElementById("event-input-title").value.trim() || "Concert / Spectacle";
   const location = document.getElementById("event-input-location").value.trim();
-  const calendarTag = document.getElementById("event-input-calendar").value.trim();
+  const calendarTarget = document.getElementById("event-input-calendar").value.trim();
   const sourceUrl = activeTabInfo ? activeTabInfo.url : "";
 
-  const titleWithTag = calendarTag ? `[${calendarTag}] ${baseTitle}` : baseTitle;
+  // Title is clean without any prefix
   const details = `Extracted via SwissKnife Extension.\nSource: ${sourceUrl}`;
 
   eventList.forEach((evt) => {
     const startIso = formatGoogleCalendarDate(evt.start);
     const endIso = formatGoogleCalendarDate(evt.end);
 
-    const gcalUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(
-      titleWithTag
+    let gcalUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(
+      baseTitle
     )}&dates=${startIso}/${endIso}&details=${encodeURIComponent(details)}&location=${encodeURIComponent(location)}`;
+
+    // If a target calendar name or ID is set, target that calendar
+    if (calendarTarget) {
+      gcalUrl += `&src=${encodeURIComponent(calendarTarget)}&add=${encodeURIComponent(calendarTarget)}`;
+    }
 
     chrome.tabs.create({ url: gcalUrl });
   });
