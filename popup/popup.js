@@ -770,27 +770,20 @@ JSON FORMAT:
   ]
 }`;
 
-    // Discover available model dynamically or use best fallback chain
-    const candidateModels = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash-latest", "gemini-1.5-flash"];
+    // Discover all available models dynamically on user account
+    let candidateModels = await getAllAvailableGeminiModels(apiKey);
+    if (!candidateModels || candidateModels.length === 0) {
+      candidateModels = ["gemini-3.6-flash", "gemini-3.6-pro", "gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-1.5-flash"];
+    }
+
     let aiResponse = null;
-
-    // Try dynamic discovery first
-    const discoveredModel = await getBestAvailableGeminiModel(apiKey);
-    if (discoveredModel) {
-      aiResponse = await callGeminiApi(apiKey, discoveredModel, aiPrompt);
-    }
-
-    // Fallback through candidate list if needed
-    if (!aiResponse) {
-      for (const model of candidateModels) {
-        if (model === discoveredModel) continue;
-        aiResponse = await callGeminiApi(apiKey, model, aiPrompt);
-        if (aiResponse) break;
-      }
+    for (const model of candidateModels) {
+      aiResponse = await callGeminiApi(apiKey, model, aiPrompt, 2);
+      if (aiResponse) break;
     }
 
     if (!aiResponse) {
-      throw new Error("Invalid or empty response from Gemini API. Check your API key.");
+      throw new Error("Gemini API is currently busy or unavailable. Please retry in a moment.");
     }
 
     const aiData = JSON.parse(aiResponse);
@@ -833,10 +826,10 @@ JSON FORMAT:
   }
 }
 
-async function getBestAvailableGeminiModel(apiKey) {
+async function getAllAvailableGeminiModels(apiKey) {
   try {
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-    if (!res.ok) return null;
+    if (!res.ok) return [];
     const data = await res.json();
     const models = data.models || [];
     
@@ -846,57 +839,73 @@ async function getBestAvailableGeminiModel(apiKey) {
       m.supportedGenerationMethods.includes("generateContent")
     );
 
-    // Prefer flash models
-    const flashModels = contentModels.filter((m) => m.name.toLowerCase().includes("flash"));
-    const listToPickFrom = flashModels.length > 0 ? flashModels : contentModels;
+    // Sort: flash models first, then pro models
+    const flashList = contentModels
+      .filter((m) => m.name.toLowerCase().includes("flash"))
+      .map((m) => m.name.replace(/^models\//, ""));
 
-    if (listToPickFrom.length > 0) {
-      // Pick the latest model name (strip "models/" prefix if present)
-      const chosen = listToPickFrom[0].name.replace(/^models\//, "");
-      return chosen;
-    }
-    return null;
+    const otherList = contentModels
+      .filter((m) => !m.name.toLowerCase().includes("flash"))
+      .map((m) => m.name.replace(/^models\//, ""));
+
+    return [...flashList, ...otherList];
   } catch (e) {
-    return null;
+    return [];
   }
 }
 
-async function callGeminiApi(apiKey, modelName, promptText) {
-  try {
-    const cleanModel = modelName.replace(/^models\//, "");
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${apiKey}`;
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: promptText }]
+async function callGeminiApi(apiKey, modelName, promptText, maxRetries = 2) {
+  const cleanModel = modelName.replace(/^models\//, "");
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${apiKey}`;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: "user",
+              parts: [{ text: promptText }]
+            }
+          ],
+          generationConfig: {
+            responseMimeType: "application/json",
+            temperature: 0.1
           }
-        ],
-        generationConfig: {
-          responseMimeType: "application/json",
-          temperature: 0.1
-        }
-      })
-    });
+        })
+      });
 
-    if (!response.ok) {
+      if (response.ok) {
+        const json = await response.json();
+        const textContent = json.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (textContent) return textContent.trim();
+      }
+
+      const status = response.status;
       const errText = await response.text();
-      console.warn(`Gemini API error (${cleanModel}):`, errText);
-      return null;
-    }
+      console.warn(`Gemini API (${cleanModel}) status ${status}:`, errText);
 
-    const json = await response.json();
-    const textContent = json.candidates?.[0]?.content?.parts?.[0]?.text;
-    return textContent ? textContent.trim() : null;
-  } catch (e) {
-    console.error(`Gemini API call failed for ${modelName}:`, e);
-    return null;
+      // If 503 or 429, wait 1 second and retry
+      if ((status === 503 || status === 429) && attempt < maxRetries - 1) {
+        await new Promise((r) => setTimeout(r, 1000));
+        continue;
+      }
+
+      // If 404 or other client error, don't retry this model
+      break;
+    } catch (e) {
+      console.error(`Fetch exception for ${cleanModel}:`, e);
+      if (attempt < maxRetries - 1) {
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+    }
   }
+
+  return null;
 }
 
 async function scanCurrentPageForDates() {
