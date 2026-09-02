@@ -154,12 +154,12 @@ function setupFipModule() {
       if (audioEl.paused) {
         audioEl.src = FIP_STREAM_URL;
         audioEl.play();
-        playBtn.textContent = "⏸ Pause FIP";
+        playBtn.textContent = "Pause FIP";
         playBtn.classList.replace("btn-outline-primary", "btn-danger");
       } else {
         audioEl.pause();
         audioEl.src = "";
-        playBtn.textContent = "▶ Play FIP";
+        playBtn.textContent = "Play FIP";
         playBtn.classList.replace("btn-danger", "btn-outline-primary");
       }
     });
@@ -397,8 +397,8 @@ function filterAndRenderLibrary() {
       </div>
       ${track.notes ? `<div class="small text-muted mb-1 fst-italic">"${escapeHtml(track.notes)}"</div>` : ""}
       <div class="d-flex justify-content-between align-items-center text-muted mb-1" style="font-size:0.7rem;">
-        <span>📅 ${createdStr ? `Added: ${createdStr}` : ""}</span>
-        ${updatedStr ? `<span>✏️ Mod: ${updatedStr}</span>` : ""}
+        <span>${createdStr ? `Added: ${createdStr}` : ""}</span>
+        ${updatedStr ? `<span>(Mod: ${updatedStr})</span>` : ""}
       </div>
       <div class="d-flex flex-wrap gap-1 align-items-center justify-content-between mt-1 pt-1 border-top">
         <div class="d-flex flex-wrap gap-1 align-items-center">
@@ -408,8 +408,8 @@ function filterAndRenderLibrary() {
           <a href="${links.youtube}" target="_blank" class="badge bg-danger text-decoration-none py-1">YT</a>
           <a href="${links.discogs}" target="_blank" class="badge bg-dark text-decoration-none py-1">Discogs</a>
           <a href="${links.spotify}" target="_blank" class="badge bg-success text-decoration-none py-1">Spotify</a>
-          <button class="btn btn-sm btn-outline-secondary py-0 px-1 btn-edit-track" title="Edit track" style="font-size:0.75rem;">✏</button>
-          <button class="btn btn-sm btn-outline-danger py-0 px-1 btn-delete-track" title="Delete track" style="font-size:0.75rem;">✕</button>
+          <button class="btn btn-sm btn-outline-secondary py-0 px-2 btn-edit-track" title="Edit track" style="font-size:0.75rem;">Edit</button>
+          <button class="btn btn-sm btn-outline-danger py-0 px-2 btn-delete-track" title="Delete track" style="font-size:0.75rem;">Del</button>
         </div>
       </div>
     `;
@@ -746,7 +746,7 @@ function renderDetectedDates() {
         </label>
       </div>
       <button class="btn btn-sm btn-outline-primary py-0 px-2 btn-single-gcal" style="font-size: 0.75rem;">
-        📅 Open
+        Open
       </button>
     `;
 
@@ -935,10 +935,10 @@ async function loadAndRenderBnfBookmarks() {
       </div>
       <div class="d-flex gap-1 align-items-center flex-shrink-0">
         <button class="btn btn-sm btn-outline-primary py-0 px-2 bm-open-btn" title="Open via BnF" style="font-size:0.75rem;">
-          🏛️ Open
+          Open
         </button>
-        <button class="btn btn-sm btn-outline-danger py-0 px-1 bm-del-btn" title="Delete bookmark" style="font-size:0.75rem;">
-          ✕
+        <button class="btn btn-sm btn-outline-danger py-0 px-2 bm-del-btn" title="Delete bookmark" style="font-size:0.75rem;">
+          Del
         </button>
       </div>
     `;

@@ -21,16 +21,16 @@
     <!-- Main Navigation Tabs -->
     <nav class="nav nav-pills nav-fill px-2 py-2 bg-white border-bottom small" id="nav-tabs" role="tablist">
       <button class="nav-link active py-1" id="tab-fip-btn" data-bs-toggle="pill" data-bs-target="#tab-fip" type="button" role="tab">
-        📻 FIP Live
+        FIP Live
       </button>
       <button class="nav-link py-1" id="tab-library-btn" data-bs-toggle="pill" data-bs-target="#tab-library" type="button" role="tab">
-        🎵 Library <span id="library-count-badge" class="badge bg-secondary ms-1">0</span>
+        Library <span id="library-count-badge" class="badge bg-secondary ms-1">0</span>
       </button>
       <button class="nav-link py-1" id="tab-events-btn" data-bs-toggle="pill" data-bs-target="#tab-events" type="button" role="tab">
-        📅 Calendar
+        Calendar
       </button>
       <button class="nav-link py-1" id="tab-bnf-btn" data-bs-toggle="pill" data-bs-target="#tab-bnf" type="button" role="tab">
-        📚 BnF Proxy
+        BnF Proxy
       </button>
     </nav>
 
@@ -44,7 +44,7 @@
             <div class="d-flex justify-content-between align-items-center mb-2">
               <span class="badge bg-danger">FIP Radio Live</span>
               <button id="fip-refresh-btn" class="btn btn-sm btn-outline-secondary py-0 px-2" title="Refresh live song">
-                🔄 Refresh
+                Refresh
               </button>
             </div>
 
@@ -77,7 +77,7 @@
               <span class="small fw-semibold text-secondary">Audio Stream:</span>
               <div class="d-flex align-items-center gap-2">
                 <button id="fip-play-btn" class="btn btn-sm btn-outline-primary py-1 px-3">
-                  ▶ Play FIP
+                  Play FIP
                 </button>
                 <audio id="fip-audio-element" preload="none"></audio>
               </div>
@@ -110,7 +110,7 @@
               <input type="text" class="form-control form-control-sm" id="fip-input-notes" placeholder="Optional notes...">
             </div>
             <button id="fip-save-library-btn" class="btn btn-primary btn-sm w-100 mt-1">
-              ⭐ Add to Global Library
+              Add to Library
             </button>
             <div id="fip-save-alert" class="small text-success mt-2 text-center d-none">Saved to Library!</div>
           </div>
@@ -126,7 +126,7 @@
           </button>
           <div class="dropdown">
             <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
-              ⚙ Data
+              Data
             </button>
             <ul class="dropdown-menu dropdown-menu-end small">
               <li><button class="dropdown-item" id="export-json-btn">Export JSON</button></li>
@@ -190,7 +190,7 @@
             <div class="d-flex justify-content-between align-items-center mb-2">
               <h2 class="h6 mb-0 fw-bold">Page Date Extractor</h2>
               <button id="events-scan-tab-btn" class="btn btn-sm btn-primary py-1 px-2">
-                🔍 Scan Current Page
+                Scan Current Page
               </button>
             </div>
             <p class="small text-muted mb-2">
@@ -246,10 +246,10 @@
             </p>
             <div class="d-flex gap-2">
               <a href="https://espacepersonnel.bnf.fr/" target="_blank" class="btn btn-primary btn-sm flex-grow-1 py-1 fw-semibold">
-                🔑 Connexion Espace Personnel BnF &rarr;
+                Connexion Espace Personnel BnF &rarr;
               </a>
               <a href="https://catalogue.bnf.fr/recherche-ressources-electroniques.do" target="_blank" class="btn btn-outline-secondary btn-sm py-1" title="Catalogue complet des ressources electroniques BnF">
-                📚 Catalogue Bases
+                Catalogue Bases
               </a>
             </div>
           </div>
@@ -259,7 +259,7 @@
         <div class="card shadow-sm mb-3">
           <div class="card-header bg-white py-2">
             <div class="d-flex justify-content-between align-items-center">
-              <h3 class="h6 mb-0 fw-semibold text-dark">📰 Presse Quotidienne & Régionale</h3>
+              <h3 class="h6 mb-0 fw-semibold text-dark">Presse Quotidienne & Régionale</h3>
               <span class="badge bg-success">Texte & PDF</span>
             </div>
           </div>
@@ -270,7 +270,7 @@
             <div class="d-grid gap-2">
               <a href="https://catalogue.bnf.fr/ark:/12148/cb38837494f" target="_blank" class="btn btn-outline-primary btn-sm text-start d-flex justify-content-between align-items-center py-2">
                 <div>
-                  <div class="fw-bold">🗞️ Accès Europresse BnF (Kiosque PDF & Articles)</div>
+                  <div class="fw-bold">Accès Europresse BnF (Kiosque PDF & Articles)</div>
                   <div class="small text-muted">L'Union, Le Dauphiné Libéré, Mediapart, Le Monde, Le Figaro, Libération...</div>
                 </div>
                 <span class="fs-6">&rarr;</span>
@@ -278,7 +278,7 @@
 
               <a href="https://catalogue.bnf.fr/recherche-ressources-electroniques.do?motCle=proquest" target="_blank" class="btn btn-outline-dark btn-sm text-start d-flex justify-content-between align-items-center py-2">
                 <div>
-                  <div class="fw-bold">🌐 Presse Internationale (The Wall Street Journal)</div>
+                  <div class="fw-bold">Presse Internationale (The Wall Street Journal)</div>
                   <div class="small text-muted">The Wall Street Journal, Financial Times, NYT (via ProQuest / Factiva)</div>
                 </div>
                 <span class="fs-6">&rarr;</span>
@@ -290,38 +290,38 @@
         <!-- Academic Reviews & Portals -->
         <div class="card shadow-sm mb-3">
           <div class="card-header bg-white py-2">
-            <h3 class="h6 mb-0 fw-semibold text-dark">📚 Revues & Essais (Cairn, JSTOR...)</h3>
+            <h3 class="h6 mb-0 fw-semibold text-dark">Revues & Essais (Cairn, JSTOR...)</h3>
           </div>
           <div class="card-body p-2">
             <div class="row g-1">
               <div class="col-6">
                 <a href="https://www.cairn.info" target="_blank" class="btn btn-sm btn-outline-secondary w-100 text-truncate">
-                  📖 Cairn.info
+                  Cairn.info
                 </a>
               </div>
               <div class="col-6">
                 <a href="https://www.jstor.org" target="_blank" class="btn btn-sm btn-outline-secondary w-100 text-truncate">
-                  📖 JSTOR
+                  JSTOR
                 </a>
               </div>
               <div class="col-6">
                 <a href="https://www.openedition.org" target="_blank" class="btn btn-sm btn-outline-secondary w-100 text-truncate">
-                  📖 OpenEdition
+                  OpenEdition
                 </a>
               </div>
               <div class="col-6">
                 <a href="https://www.persee.fr" target="_blank" class="btn btn-sm btn-outline-secondary w-100 text-truncate">
-                  📖 Persée
+                  Persée
                 </a>
               </div>
               <div class="col-6">
                 <a href="https://www.retronews.fr" target="_blank" class="btn btn-sm btn-outline-secondary w-100 text-truncate">
-                  📜 RetroNews BnF
+                  RetroNews BnF
                 </a>
               </div>
               <div class="col-6">
                 <a href="https://gallica.bnf.fr/html/und/presse-et-revues/presse-et-revues" target="_blank" class="btn btn-sm btn-outline-secondary w-100 text-truncate">
-                  🏛️ Gallica Presse
+                  Gallica Presse
                 </a>
               </div>
             </div>
@@ -331,7 +331,7 @@
         <!-- Custom User Bookmarks -->
         <div class="card shadow-sm mb-3">
           <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
-            <h3 class="h6 mb-0 fw-semibold">⭐ Mes Favoris BnF Personnalisés</h3>
+            <h3 class="h6 mb-0 fw-semibold">Mes Favoris BnF Personnalisés</h3>
             <button class="btn btn-sm btn-outline-primary py-0 px-2" id="bnf-add-bookmark-toggle">
               + Ajouter
             </button>
@@ -364,7 +364,7 @@
         <!-- Active Page Rewriter & Proxy Settings -->
         <div class="card shadow-sm">
           <div class="card-header bg-white py-2">
-            <h3 class="h6 mb-0 fw-semibold">🔄 Bascule Page Active (Proxy)</h3>
+            <h3 class="h6 mb-0 fw-semibold">Bascule Page Active (Proxy)</h3>
           </div>
           <div class="card-body p-3">
             <div class="p-2 bg-light border rounded mb-2">
@@ -372,7 +372,7 @@
               <div id="bnf-current-url" class="small text-break text-dark font-monospace">Chargement...</div>
             </div>
             <button id="bnf-open-tab-btn" class="btn btn-outline-primary btn-sm w-100 py-1 mb-3">
-              🏛️ Tenter ouverture page active via Proxy BnF
+              Tenter ouverture page active via Proxy BnF
             </button>
 
             <label class="form-label small fw-semibold mb-1" for="bnf-proxy-input">Modèle de Proxy (si configuré)</label>
