@@ -1,5 +1,4 @@
-// SwissKnife Extension - Main Popup Script
-const FIP_API_URL = 'https://www.radiofrance.fr/fip/api/live';
+const FIP_API_URL = 'https://api.radiofrance.fr/livemeta/pull/7';
 const FIP_STREAM_URL = 'https://icecast.radiofrance.fr/fip-midfi.mp3';
 const DEFAULT_BNF_PROXY = 'https://acces-distant.bnf.fr/login?url=';
 
@@ -184,13 +183,27 @@ async function refreshFipLive() {
     }
 
     const data = await response.json();
-    const songData = data.now?.song || data.levels?.[0]?.items?.[0] || data.now || {};
+    const nowTs = Math.floor(Date.now() / 1000);
+    const steps = Object.values(data.steps || {});
+    
+    // Find active song or fallback to latest step
+    const songs = steps.filter((s) => s && (s.embedType === "song" || s.title));
+    let songData = songs.find((s) => s.start <= nowTs && nowTs <= s.end);
+    
+    if (!songData && songs.length > 0) {
+      songs.sort((a, b) => (b.start || 0) - (a.start || 0));
+      songData = songs[0];
+    }
+
+    if (!songData) {
+      songData = data.now?.song || data.levels?.[0]?.items?.[0] || {};
+    }
 
     const title = songData.title || songData.name || "Unknown Track";
-    const artist = songData.performers || songData.artist || songData.authors || "Unknown Artist";
-    const album = songData.album?.title || songData.album || "";
-    const year = songData.releaseYear || songData.year || "";
-    const cover = songData.coverUrl || songData.cover?.src || songData.visual || "../icons/icon48.png";
+    const artist = songData.authors || songData.performers || (songData.highlightedArtists && songData.highlightedArtists[0]) || songData.artist || "Unknown Artist";
+    const album = songData.titreAlbum || songData.album?.title || songData.album || "";
+    const year = songData.anneeEditionMusique || songData.releaseYear || songData.year || "";
+    const cover = songData.visual || songData.coverUrl || songData.cover?.src || "../icons/icon48.png";
 
     currentFipTrack = {
       title,
@@ -203,7 +216,7 @@ async function refreshFipLive() {
 
     titleEl.textContent = title;
     artistEl.textContent = artist;
-    albumEl.textContent = [album, year].filter(Boolean).join(" • ") || "Single / Unknown Album";
+    albumEl.textContent = [album, year].filter(Boolean).join(" • ") || "Single / Album";
     coverEl.src = cover;
 
     updateSearchLinks("fip-link-", currentFipTrack.links);

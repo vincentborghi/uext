@@ -11,6 +11,7 @@
     "tabs"
   ],
   "host_permissions": [
+    "https://api.radiofrance.fr/*",
     "https://www.radiofrance.fr/*",
     "https://openapi.radiofrance.fr/*",
     "https://acces-distant.bnf.fr/*"
