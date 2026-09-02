@@ -833,13 +833,15 @@ async function getAllAvailableGeminiModels(apiKey) {
     const data = await res.json();
     const models = data.models || [];
     
-    // Filter for generateContent models
-    const contentModels = models.filter((m) => 
-      Array.isArray(m.supportedGenerationMethods) && 
-      m.supportedGenerationMethods.includes("generateContent")
-    );
+    // Filter for generateContent models and exclude TTS/audio/embeddings/robotics
+    const contentModels = models.filter((m) => {
+      const name = (m.name || "").toLowerCase();
+      const isSupported = Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes("generateContent");
+      const isSpecialized = name.includes("tts") || name.includes("embedding") || name.includes("imagen") || name.includes("aqa") || name.includes("robotics");
+      return isSupported && !isSpecialized;
+    });
 
-    // Sort: flash models first, then pro models
+    // Sort: flash models first, then general models
     const flashList = contentModels
       .filter((m) => m.name.toLowerCase().includes("flash"))
       .map((m) => m.name.replace(/^models\//, ""));
@@ -887,20 +889,20 @@ async function callGeminiApi(apiKey, modelName, promptText, maxRetries = 2) {
 
       const status = response.status;
       const errText = await response.text();
-      console.warn(`Gemini API (${cleanModel}) status ${status}:`, errText);
+      console.debug(`Gemini API candidate (${cleanModel}) returned status ${status}:`, errText);
 
-      // If 503 or 429, wait 1 second and retry
+      // If 503 or 429, wait 1.2 second and retry
       if ((status === 503 || status === 429) && attempt < maxRetries - 1) {
-        await new Promise((r) => setTimeout(r, 1000));
+        await new Promise((r) => setTimeout(r, 1200));
         continue;
       }
 
       // If 404 or other client error, don't retry this model
       break;
     } catch (e) {
-      console.error(`Fetch exception for ${cleanModel}:`, e);
+      console.debug(`Fetch exception for ${cleanModel}:`, e);
       if (attempt < maxRetries - 1) {
-        await new Promise((r) => setTimeout(r, 1000));
+        await new Promise((r) => setTimeout(r, 1200));
       }
     }
   }
