@@ -31,18 +31,51 @@ async function loadActiveTabInfo() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tab) {
       activeTabInfo = tab;
-      const bnfUrlEl = document.getElementById('bnf-current-url');
+      const bnfUrlEl = document.getElementById("bnf-current-url");
       if (bnfUrlEl) {
-        bnfUrlEl.textContent = tab.url || 'No active URL';
+        bnfUrlEl.textContent = tab.url || "No active URL";
       }
-      const eventTitleEl = document.getElementById('event-input-title');
-      if (eventTitleEl && !eventTitleEl.value && tab.title) {
-        const cleanTitle = tab.title.replace(/\s*[-–|].*$/, '').trim();
-        eventTitleEl.value = cleanTitle || tab.title;
+
+      // Try smart page extraction on the active tab
+      if (tab.url && !tab.url.startsWith("chrome://") && !tab.url.startsWith("edge://")) {
+        try {
+          const results = await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: runSmartPageExtractor
+          });
+          const pageData = results?.[0]?.result;
+          if (pageData) {
+            const eventTitleEl = document.getElementById("event-input-title");
+            const eventLocationEl = document.getElementById("event-input-location");
+
+            if (eventTitleEl && pageData.formattedTitle) {
+              eventTitleEl.value = pageData.formattedTitle;
+            } else if (eventTitleEl && pageData.title && (!eventTitleEl.value || eventTitleEl.value.startsWith("www."))) {
+              eventTitleEl.value = pageData.title;
+            }
+
+            if (eventLocationEl && pageData.location) {
+              eventLocationEl.value = pageData.location;
+            }
+
+            // If structured dates or sample text exists, pre-detect
+            if ((pageData.structuredDates && pageData.structuredDates.length > 0) || pageData.sample) {
+              detectedEvents = extractDatesFromMetadata(pageData);
+              renderDetectedDates();
+            }
+          }
+        } catch (e) {
+          // Fallback simple title
+          const eventTitleEl = document.getElementById("event-input-title");
+          if (eventTitleEl && !eventTitleEl.value && tab.title) {
+            const cleanTitle = tab.title.replace(/\s*[-–|].*$/, "").trim();
+            eventTitleEl.value = cleanTitle || tab.title;
+          }
+        }
       }
     }
   } catch (err) {
-    console.error('Failed to get active tab:', err);
+    console.error("Failed to get active tab:", err);
   }
 }
 
@@ -621,6 +654,9 @@ function setupEventsModule() {
 
 async function scanCurrentPageForDates() {
   const listContainer = document.getElementById("events-list-container");
+  const eventTitleInput = document.getElementById("event-input-title");
+  const eventLocationInput = document.getElementById("event-input-location");
+
   listContainer.innerHTML = `<div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> Scanning page...</div>`;
 
   try {
@@ -629,26 +665,159 @@ async function scanCurrentPageForDates() {
 
     const results = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      func: () => {
-        const sel = window.getSelection().toString().trim();
-        const bodyText = document.body.innerText || "";
-        return {
-          selection: sel,
-          sample: sel.length > 0 ? sel : bodyText.substring(0, 20000),
-          title: document.title,
-          url: window.location.href
-        };
-      }
+      func: runSmartPageExtractor
     });
 
     const pageData = results?.[0]?.result || {};
-    const textToScan = pageData.sample || "";
 
-    detectedEvents = extractDatesFromText(textToScan);
+    // 1. Fill Event Title and Location
+    if (pageData.formattedTitle) {
+      eventTitleInput.value = pageData.formattedTitle;
+    } else if (pageData.title && (!eventTitleInput.value || eventTitleInput.value.startsWith("www."))) {
+      eventTitleInput.value = pageData.title;
+    }
+
+    if (pageData.location) {
+      eventLocationInput.value = pageData.location;
+    }
+
+    // 2. Extract Dates with structured data and text regex
+    detectedEvents = extractDatesFromMetadata(pageData);
     renderDetectedDates();
   } catch (err) {
     listContainer.innerHTML = `<div class="text-danger small text-center py-2">Could not scan page: ${escapeHtml(err.message)}</div>`;
   }
+}
+
+// Function injected into the active page DOM
+function runSmartPageExtractor() {
+  const data = {
+    title: "",
+    artist: "",
+    venue: "",
+    city: "",
+    location: "",
+    formattedTitle: "",
+    structuredDates: [],
+    sample: "",
+    selection: ""
+  };
+
+  const sel = window.getSelection() ? window.getSelection().toString().trim() : "";
+  data.selection = sel;
+
+  // 1. Check Schema.org JSON-LD scripts for structured Event
+  const ldScripts = document.querySelectorAll('script[type="application/ld+json"]');
+  ldScripts.forEach((script) => {
+    try {
+      const parsed = JSON.parse(script.textContent);
+      const items = Array.isArray(parsed) ? parsed : (parsed["@graph"] || [parsed]);
+      items.forEach((item) => {
+        if (item && (item["@type"] === "Event" || item["@type"] === "MusicEvent" || item["@type"] === "TheaterEvent" || (typeof item["@type"] === "string" && item["@type"].includes("Event")))) {
+          if (item.name && !data.title) data.title = item.name.trim();
+          if (item.startDate) {
+            data.structuredDates.push({
+              start: item.startDate,
+              end: item.endDate,
+              name: item.name
+            });
+          }
+          if (item.performer) {
+            const perf = Array.isArray(item.performer) ? item.performer[0] : item.performer;
+            const perfName = typeof perf === "string" ? perf : perf?.name;
+            if (perfName && !data.artist) data.artist = perfName.trim();
+          }
+          if (item.location) {
+            const locName = item.location.name ? item.location.name.trim() : "";
+            const addr = item.location.address || {};
+            const locality = addr.addressLocality ? addr.addressLocality.trim() : "";
+            if (locality) data.city = locality;
+            if (locName) data.venue = locName;
+            if (locality && locName && !locName.toLowerCase().includes(locality.toLowerCase())) {
+              data.location = `${locality} (${locName})`;
+            } else {
+              data.location = locName || locality;
+            }
+          }
+        }
+      });
+    } catch (e) {}
+  });
+
+  // 2. Open Graph & Meta tags
+  const ogTitle = document.querySelector('meta[property="og:title"]')?.getAttribute("content");
+  const metaTitle = document.querySelector('meta[name="title"]')?.getAttribute("content");
+
+  // 3. Headings & Selectors
+  const h1 = document.querySelector("h1")?.innerText?.trim();
+  const eventTitleEl = document.querySelector('[class*="event-title"], [class*="eventTitle"], [class*="eventName"], [class*="show-title"]')?.innerText?.trim();
+  const artistEl = document.querySelector('[class*="artist"], [class*="performer"], [class*="headliner"]')?.innerText?.trim();
+  const venueEl = document.querySelector('[class*="venue"], [class*="location"], [class*="place"], [class*="hall"], [class*="salle"]')?.innerText?.trim();
+  const cityEl = document.querySelector('[class*="city"], [class*="ville"], [class*="locality"]')?.innerText?.trim();
+
+  if (!data.title) {
+    data.title = eventTitleEl || h1 || ogTitle || metaTitle || document.title || "";
+  }
+  if (!data.artist && artistEl) {
+    data.artist = artistEl;
+  }
+  if (!data.location) {
+    if (cityEl && venueEl && !venueEl.toLowerCase().includes(cityEl.toLowerCase())) {
+      data.location = `${cityEl} (${venueEl})`;
+    } else if (venueEl) {
+      data.location = venueEl;
+    } else if (cityEl) {
+      data.location = cityEl;
+    }
+  }
+
+  // 4. Text Pattern Search for "CITY | Venue - Hall"
+  const bodyText = (document.body.innerText || "").substring(0, 30000);
+  if (!data.location) {
+    const locMatch = bodyText.match(/\b([A-ZÀ-Ÿ\s\-]{3,20})\s*\|\s*([A-Za-zÀ-ÿ0-9\s\-–\(\)]{3,40})/);
+    if (locMatch) {
+      const c = locMatch[1].trim();
+      const v = locMatch[2].trim();
+      const forbidden = ["billet", "tarif", "normal", "date", "heure", "prix", "contact"];
+      if (!forbidden.some((f) => c.toLowerCase().includes(f))) {
+        data.location = `${c} (${v})`;
+        data.city = c;
+        data.venue = v;
+      }
+    }
+  }
+
+  // 5. Clean up title from platform boilerplates
+  if (data.title) {
+    data.title = data.title
+      .replace(/\s*[-–|•:]\s*(?:Billetterie|Tickets|Billeterie|Ticketmaster|Eventim|Fnac Spectacles|Shotgun|Dice|BilletReduc|Digitick|Seetickets|See Tickets|France Billet|Official Site|Site Officiel|Reservation|Achat de billets|Aperçu|Tournée|Tour).*$/i, "")
+      .replace(/^www\.[a-z0-9\-]+\.[a-z]{2,4}\s*[-–|:]\s*/i, "")
+      .trim();
+  }
+
+  // URL fallback slug
+  if (!data.title || data.title.startsWith("www.") || data.title.includes("http")) {
+    const parts = window.location.pathname.split("/").filter(Boolean);
+    const slug = parts.find((p) => p.includes("-") && !/^\d+$/.test(p));
+    if (slug) {
+      const words = slug.replace(/-\d+$/, "").replace(/[-_]/g, " ");
+      data.title = words.split(" ").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+    }
+  }
+
+  // 6. Build smart title (e.g. "Concert Rodolphe Burger / Fontaine")
+  let mainSubject = data.artist || data.title || "Spectacle";
+  mainSubject = mainSubject.replace(/^(?:Concert|Spectacle|Festival)\s+/i, "").trim();
+  const cityOrVenue = data.city || (data.location ? data.location.split("(")[0].trim() : "");
+
+  if (cityOrVenue) {
+    data.formattedTitle = `Concert ${mainSubject} / ${cityOrVenue}`;
+  } else {
+    data.formattedTitle = `Concert ${mainSubject}`;
+  }
+
+  data.sample = sel.length > 0 ? sel : bodyText;
+  return data;
 }
 
 const MONTH_MAP = {
@@ -666,23 +835,60 @@ const MONTH_MAP = {
   decembre: 12, "decembre": 12, "décembre": 12, dec: 12
 };
 
-function extractDatesFromText(text) {
+function extractDatesFromMetadata(pageData) {
   const currentYear = new Date().getFullYear();
   const events = [];
+  let eventIdx = 0;
 
-  const rangePattern = /(?:du\s+)?(\d{1,2})\s+(?:au\s+(\d{1,2})\s+)?([a-zA-Z\u00C0-\u017F]+)(?:\s+(\d{4}))?(?:\s*(?:[àa@]\s*|\s+)(\d{1,2})[h:](\d{2})?)?/gi;
-  const numericPattern = /\b(\d{1,2})[\/\.-](\d{1,2})(?:[\/\.-](\d{2,4}))?(?:\s*(?:[àa@]\s*|\s+)(\d{1,2})[h:](\d{2}))?\b/g;
+  // 1. Structured JSON-LD Dates (100% precise)
+  if (pageData.structuredDates && pageData.structuredDates.length > 0) {
+    pageData.structuredDates.forEach((sd) => {
+      try {
+        const start = new Date(sd.start);
+        if (!isNaN(start.getTime())) {
+          let end = sd.end ? new Date(sd.end) : null;
+          if (!end || isNaN(end.getTime())) {
+            end = new Date(start.getTime() + 2 * 3600 * 1000);
+          }
+          const label = start.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long", year: "numeric" });
+          events.push({
+            id: "evt_" + eventIdx++,
+            label: label,
+            start: start,
+            end: end,
+            raw: sd.start
+          });
+        }
+      } catch (e) {}
+    });
+  }
+
+  // 2. Text Regex Extraction (with robust time separator support: " | ", " à ", " - ")
+  const text = pageData.sample || "";
+  const rangePattern = /(?:du\s+)?(\d{1,2})\s+(?:au\s+(\d{1,2})\s+)?([a-zA-Z\u00C0-\u017F]+)(?:\s+(\d{4}))?(?:(?:\s*[\|\-,–—/àa@]\s*|\s+(?:à|a|at|vers|dès)\s*|\s+)(\d{1,2})[h:](\d{2})?)?/gi;
+  const numericPattern = /\b(\d{1,2})[\/\.-](\d{1,2})(?:[\/\.-](\d{2,4}))?(?:(?:\s*[\|\-,–—/àa@]\s*|\s+(?:à|a|at|vers|dès)\s*|\s+)(\d{1,2})[h:](\d{2})?)?\b/g;
 
   let match;
-  let eventIdx = 0;
 
   while ((match = rangePattern.exec(text)) !== null) {
     const startDay = parseInt(match[1], 10);
     const endDay = match[2] ? parseInt(match[2], 10) : null;
     const rawMonth = match[3].toLowerCase();
     const rawYear = match[4] ? parseInt(match[4], 10) : currentYear;
-    const hour = match[5] ? parseInt(match[5], 10) : 20;
-    const minute = match[6] ? parseInt(match[6], 10) : 0;
+    let hour = match[5] ? parseInt(match[5], 10) : null;
+    let minute = match[6] ? parseInt(match[6], 10) : 0;
+
+    // Check adjacent text for time like " | 20:30" if not captured directly
+    if (hour === null) {
+      const lookahead = text.substring(match.index + match[0].length, match.index + match[0].length + 30);
+      const timeMatch = lookahead.match(/^\s*(?:[\|\-,–—/:]|à|a|at|vers|dès)?\s*(\d{1,2})[h:](\d{2})\b/i);
+      if (timeMatch) {
+        hour = parseInt(timeMatch[1], 10);
+        minute = parseInt(timeMatch[2], 10);
+      } else {
+        hour = 20;
+      }
+    }
 
     const monthNum = MONTH_MAP[rawMonth];
     if (monthNum && startDay >= 1 && startDay <= 31) {
@@ -712,8 +918,20 @@ function extractDatesFromText(text) {
     const month = parseInt(match[2], 10);
     let year = match[3] ? parseInt(match[3], 10) : currentYear;
     if (year < 100) year += 2000;
-    const hour = match[4] ? parseInt(match[4], 10) : 20;
-    const minute = match[5] ? parseInt(match[5], 10) : 0;
+    let hour = match[4] ? parseInt(match[4], 10) : null;
+    let minute = match[5] ? parseInt(match[5], 10) : 0;
+
+    // Check adjacent text for time like " | 20:30"
+    if (hour === null) {
+      const lookahead = text.substring(match.index + match[0].length, match.index + match[0].length + 30);
+      const timeMatch = lookahead.match(/^\s*(?:[\|\-,–—/:]|à|a|at|vers|dès)?\s*(\d{1,2})[h:](\d{2})\b/i);
+      if (timeMatch) {
+        hour = parseInt(timeMatch[1], 10);
+        minute = parseInt(timeMatch[2], 10);
+      } else {
+        hour = 20;
+      }
+    }
 
     if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
       const startDate = new Date(year, month - 1, day, hour, minute);
