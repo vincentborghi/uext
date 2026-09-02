@@ -810,9 +810,75 @@ function setupBnfModule() {
   const saveSettingsBtn = document.getElementById("bnf-save-settings-btn");
   const savedMsg = document.getElementById("bnf-settings-saved");
 
+  // Press Favorites buttons
+  const pressButtons = document.querySelectorAll(".bnf-press-btn");
+  pressButtons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const targetUrl = btn.getAttribute("data-url");
+      if (targetUrl) {
+        openUrlThroughBnfProxy(targetUrl);
+      }
+    });
+  });
+
+  // Custom bookmarks UI elements
+  const addBookmarkToggle = document.getElementById("bnf-add-bookmark-toggle");
+  const addBookmarkForm = document.getElementById("bnf-add-bookmark-form");
+  const bmTitleInput = document.getElementById("bnf-bm-title-input");
+  const bmUrlInput = document.getElementById("bnf-bm-url-input");
+  const bmSaveBtn = document.getElementById("bnf-bm-save-btn");
+  const bmCancelBtn = document.getElementById("bnf-bm-cancel-btn");
+
+  if (addBookmarkToggle) {
+    addBookmarkToggle.addEventListener("click", () => {
+      addBookmarkForm.classList.toggle("d-none");
+      if (!addBookmarkForm.classList.contains("d-none") && activeTabInfo) {
+        if (!bmUrlInput.value) bmUrlInput.value = activeTabInfo.url || "";
+        if (!bmTitleInput.value) bmTitleInput.value = activeTabInfo.title || "";
+      }
+    });
+  }
+
+  if (bmCancelBtn) {
+    bmCancelBtn.addEventListener("click", () => {
+      addBookmarkForm.classList.add("d-none");
+    });
+  }
+
+  if (bmSaveBtn) {
+    bmSaveBtn.addEventListener("click", async () => {
+      const title = bmTitleInput.value.trim();
+      const url = bmUrlInput.value.trim();
+      if (!title || !url) {
+        alert("Title and URL are required.");
+        return;
+      }
+
+      const newBm = {
+        id: "bm_" + Date.now(),
+        title,
+        url,
+        createdAt: Date.now()
+      };
+
+      const res = await chrome.storage.local.get({ bnfBookmarks: [] });
+      const list = res.bnfBookmarks || [];
+      list.push(newBm);
+      await chrome.storage.local.set({ bnfBookmarks: list });
+
+      bmTitleInput.value = "";
+      bmUrlInput.value = "";
+      addBookmarkForm.classList.add("d-none");
+      loadAndRenderBnfBookmarks();
+    });
+  }
+
+  // Load saved proxy setting & bookmarks
   chrome.storage.local.get({ bnfProxyTemplate: DEFAULT_BNF_PROXY }, (res) => {
     proxyInput.value = res.bnfProxyTemplate || DEFAULT_BNF_PROXY;
   });
+
+  loadAndRenderBnfBookmarks();
 
   saveSettingsBtn.addEventListener("click", () => {
     const val = proxyInput.value.trim() || DEFAULT_BNF_PROXY;
@@ -827,12 +893,68 @@ function setupBnfModule() {
       alert("No active web page detected.");
       return;
     }
-    const template = proxyInput.value.trim() || DEFAULT_BNF_PROXY;
-    const finalUrl = template.includes("%s")
-      ? template.replace("%s", encodeURIComponent(activeTabInfo.url))
-      : template + encodeURIComponent(activeTabInfo.url);
+    openUrlThroughBnfProxy(activeTabInfo.url);
+  });
+}
 
-    chrome.tabs.create({ url: finalUrl });
+async function openUrlThroughBnfProxy(targetUrl) {
+  const proxyInput = document.getElementById("bnf-proxy-input");
+  const template = (proxyInput ? proxyInput.value.trim() : "") || DEFAULT_BNF_PROXY;
+  const finalUrl = template.includes("%s")
+    ? template.replace("%s", encodeURIComponent(targetUrl))
+    : template + encodeURIComponent(targetUrl);
+
+  chrome.tabs.create({ url: finalUrl });
+}
+
+async function loadAndRenderBnfBookmarks() {
+  const container = document.getElementById("bnf-custom-bookmarks-list");
+  const emptyMsg = document.getElementById("bnf-custom-bookmarks-empty");
+  if (!container) return;
+
+  const res = await chrome.storage.local.get({ bnfBookmarks: [] });
+  const bookmarks = res.bnfBookmarks || [];
+
+  if (bookmarks.length === 0) {
+    container.innerHTML = "";
+    if (emptyMsg) emptyMsg.classList.remove("d-none");
+    return;
+  }
+
+  if (emptyMsg) emptyMsg.classList.add("d-none");
+  container.innerHTML = "";
+
+  bookmarks.forEach((bm) => {
+    const item = document.createElement("div");
+    item.className = "list-group-item d-flex justify-content-between align-items-center py-2 px-2";
+
+    item.innerHTML = `
+      <div class="min-w-0 flex-grow-1 me-2 cursor-pointer bm-open-link" title="Open ${escapeHtml(bm.url)} via BnF">
+        <div class="fw-semibold text-dark text-truncate">${escapeHtml(bm.title)}</div>
+        <div class="text-muted text-truncate font-monospace" style="font-size:0.68rem;">${escapeHtml(bm.url)}</div>
+      </div>
+      <div class="d-flex gap-1 align-items-center flex-shrink-0">
+        <button class="btn btn-sm btn-outline-primary py-0 px-2 bm-open-btn" title="Open via BnF" style="font-size:0.75rem;">
+          🏛️ Open
+        </button>
+        <button class="btn btn-sm btn-outline-danger py-0 px-1 bm-del-btn" title="Delete bookmark" style="font-size:0.75rem;">
+          ✕
+        </button>
+      </div>
+    `;
+
+    item.querySelector(".bm-open-link").addEventListener("click", () => openUrlThroughBnfProxy(bm.url));
+    item.querySelector(".bm-open-btn").addEventListener("click", () => openUrlThroughBnfProxy(bm.url));
+    item.querySelector(".bm-del-btn").addEventListener("click", async () => {
+      if (confirm(`Remove bookmark "${bm.title}"?`)) {
+        const current = await chrome.storage.local.get({ bnfBookmarks: [] });
+        const updated = (current.bnfBookmarks || []).filter((b) => b.id !== bm.id);
+        await chrome.storage.local.set({ bnfBookmarks: updated });
+        loadAndRenderBnfBookmarks();
+      }
+    });
+
+    container.appendChild(item);
   });
 }
 

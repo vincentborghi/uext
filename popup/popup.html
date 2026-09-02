@@ -232,6 +232,7 @@
 
       <!-- ==================== TAB 4: BNF PROXY & TOOLS ==================== -->
       <section class="tab-pane fade" id="tab-bnf" role="tabpanel">
+        <!-- Active Tab Redirection -->
         <div class="card shadow-sm mb-3">
           <div class="card-body p-3">
             <h2 class="h6 fw-bold mb-2 text-dark">BnF Remote Access (Proxy)</h2>
@@ -250,10 +251,85 @@
           </div>
         </div>
 
-        <!-- BnF Config & Quick Catalogs -->
+        <!-- Press & Newspaper Favorites -->
+        <div class="card shadow-sm mb-3">
+          <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+            <h3 class="h6 mb-0 fw-semibold text-dark">📰 Press & Newspapers (BnF)</h3>
+            <span class="badge bg-primary">1-Click Proxy</span>
+          </div>
+          <div class="card-body p-2">
+            <div class="row g-2">
+              <div class="col-6">
+                <button class="btn btn-sm btn-outline-dark w-100 text-start d-flex justify-content-between align-items-center bnf-press-btn" data-url="https://www.lunion.fr" title="L'Union (Presse regionale)">
+                  <span class="text-truncate fw-semibold">📰 L'Union</span>
+                  <span class="small text-muted">&rarr;</span>
+                </button>
+              </div>
+              <div class="col-6">
+                <button class="btn btn-sm btn-outline-dark w-100 text-start d-flex justify-content-between align-items-center bnf-press-btn" data-url="https://www.ledauphine.com" title="Le Dauphine Libere (Presse regionale)">
+                  <span class="text-truncate fw-semibold">📰 Dauphiné Libéré</span>
+                  <span class="small text-muted">&rarr;</span>
+                </button>
+              </div>
+              <div class="col-6">
+                <button class="btn btn-sm btn-outline-dark w-100 text-start d-flex justify-content-between align-items-center bnf-press-btn" data-url="https://www.wsj.com" title="The Wall Street Journal">
+                  <span class="text-truncate fw-semibold">📰 Wall Street Journal</span>
+                  <span class="small text-muted">&rarr;</span>
+                </button>
+              </div>
+              <div class="col-6">
+                <button class="btn btn-sm btn-outline-dark w-100 text-start d-flex justify-content-between align-items-center bnf-press-btn" data-url="https://www.mediapart.fr" title="Mediapart">
+                  <span class="text-truncate fw-semibold">📰 Mediapart</span>
+                  <span class="small text-muted">&rarr;</span>
+                </button>
+              </div>
+              <div class="col-12">
+                <button class="btn btn-sm btn-outline-primary w-100 text-start d-flex justify-content-between align-items-center bnf-press-btn" data-url="https://nouveau.europresse.com/default.aspx" title="Europresse (Portail complet presse nationale et regionale)">
+                  <span class="text-truncate fw-semibold">🗞️ Europresse BnF (Portail Presse Globale)</span>
+                  <span class="small text-muted">&rarr;</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Custom User Bookmarks via BnF -->
+        <div class="card shadow-sm mb-3">
+          <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+            <h3 class="h6 mb-0 fw-semibold">⭐ My BnF Bookmarks</h3>
+            <button class="btn btn-sm btn-outline-secondary py-0 px-2" id="bnf-add-bookmark-toggle">
+              + Add
+            </button>
+          </div>
+          <div class="card-body p-2">
+            <!-- Add Bookmark Form -->
+            <div id="bnf-add-bookmark-form" class="p-2 border rounded bg-light mb-2 d-none">
+              <div class="mb-2">
+                <input type="text" id="bnf-bm-title-input" class="form-control form-control-sm" placeholder="Bookmark Title (e.g. Le Monde, Cairn...)">
+              </div>
+              <div class="mb-2">
+                <input type="url" id="bnf-bm-url-input" class="form-control form-control-sm" placeholder="Target URL (e.g. https://www.lemonde.fr)">
+              </div>
+              <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-primary py-1 px-2" id="bnf-bm-save-btn">Save Bookmark</button>
+                <button class="btn btn-sm btn-secondary py-1 px-2" id="bnf-bm-cancel-btn">Cancel</button>
+              </div>
+            </div>
+
+            <!-- Bookmark Items List -->
+            <div id="bnf-custom-bookmarks-list" class="list-group list-group-flush small">
+              <!-- Dynamically loaded -->
+            </div>
+            <div id="bnf-custom-bookmarks-empty" class="text-center text-muted small py-2 d-none">
+              No custom bookmarks yet. Click "+ Add" to save your favorite reviews/journals.
+            </div>
+          </div>
+        </div>
+
+        <!-- BnF Catalogs & Portals -->
         <div class="card shadow-sm mb-3">
           <div class="card-header bg-white py-2">
-            <h3 class="h6 mb-0 fw-semibold">Quick Catalogs & Portals</h3>
+            <h3 class="h6 mb-0 fw-semibold">🏛️ Academic Portals & Catalogs</h3>
           </div>
           <div class="card-body p-2">
             <div class="list-group list-group-flush small">
