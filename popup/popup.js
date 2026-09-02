@@ -652,16 +652,36 @@ function setupEventsModule() {
   const geminiSaveKeyBtn = document.getElementById("gemini-save-key-btn");
   const geminiSavedMsg = document.getElementById("gemini-key-saved-msg");
   const geminiStatusBadge = document.getElementById("gemini-status-badge");
+  const targetCalInput = document.getElementById("event-input-calendar");
+  const debugToggle = document.getElementById("ai-debug-toggle");
+  const debugClearBtn = document.getElementById("ai-debug-clear-btn");
 
   // Load saved Gemini API Key & Target Calendar
-  const targetCalInput = document.getElementById("event-input-calendar");
-
-  chrome.storage.local.get({ geminiApiKey: "", targetCalendarId: "Interesting" }, (res) => {
+  chrome.storage.local.get({ geminiApiKey: "", targetCalendarId: "Interesting", showAiDebugLog: false }, (res) => {
     const key = res.geminiApiKey || "";
     if (geminiKeyInput) geminiKeyInput.value = key;
     updateGeminiStatusBadge(key);
     if (targetCalInput) targetCalInput.value = res.targetCalendarId || "Interesting";
+    if (debugToggle) {
+      debugToggle.checked = Boolean(res.showAiDebugLog);
+      toggleDebugConsoleVisibility(debugToggle.checked);
+    }
   });
+
+  if (debugToggle) {
+    debugToggle.addEventListener("change", () => {
+      const isChecked = debugToggle.checked;
+      chrome.storage.local.set({ showAiDebugLog: isChecked });
+      toggleDebugConsoleVisibility(isChecked);
+    });
+  }
+
+  if (debugClearBtn) {
+    debugClearBtn.addEventListener("click", () => {
+      const contentEl = document.getElementById("ai-debug-log-content");
+      if (contentEl) contentEl.innerHTML = '<span class="text-muted">Log cleared.</span>';
+    });
+  }
 
   if (targetCalInput) {
     targetCalInput.addEventListener("change", () => {
@@ -695,6 +715,54 @@ function setupEventsModule() {
   }
 }
 
+function toggleDebugConsoleVisibility(show) {
+  const debugLogContainer = document.getElementById("ai-debug-log-container");
+  const debugClearBtn = document.getElementById("ai-debug-clear-btn");
+  if (debugLogContainer) {
+    if (show) {
+      debugLogContainer.classList.remove("d-none");
+    } else {
+      debugLogContainer.classList.add("d-none");
+    }
+  }
+  if (debugClearBtn) {
+    if (show) {
+      debugClearBtn.classList.remove("d-none");
+    } else {
+      debugClearBtn.classList.add("d-none");
+    }
+  }
+}
+
+function logAiTrace(message, type = "info") {
+  const contentEl = document.getElementById("ai-debug-log-content");
+  const container = document.getElementById("ai-debug-log-container");
+  const now = new Date();
+  const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}.${String(now.getMilliseconds()).padStart(3, "0")}`;
+
+  let color = "#a3e635"; // green default
+  if (type === "warn") color = "#facc15"; // yellow
+  if (type === "err") color = "#f87171"; // red
+  if (type === "req") color = "#38bdf8"; // cyan
+  if (type === "res") color = "#c084fc"; // purple
+
+  const line = document.createElement("div");
+  line.style.color = color;
+  line.style.wordBreak = "break-all";
+  line.textContent = `[${timeStr}] ${message}`;
+
+  if (contentEl) {
+    if (contentEl.textContent === "Waiting for AI request...") {
+      contentEl.innerHTML = "";
+    }
+    contentEl.appendChild(line);
+    if (container) {
+      container.scrollTop = container.scrollHeight;
+    }
+  }
+  console.log(`[AI-Trace] [${timeStr}] ${message}`);
+}
+
 function updateGeminiStatusBadge(key) {
   const badge = document.getElementById("gemini-status-badge");
   if (!badge) return;
@@ -711,6 +779,7 @@ async function scanCurrentPageWithGeminiAI() {
   const listContainer = document.getElementById("events-list-container");
   const eventTitleInput = document.getElementById("event-input-title");
   const eventLocationInput = document.getElementById("event-input-location");
+  const overallStartTime = performance.now();
 
   const storageRes = await chrome.storage.local.get({ geminiApiKey: "" });
   const apiKey = (storageRes.geminiApiKey || "").trim();
@@ -724,11 +793,14 @@ async function scanCurrentPageWithGeminiAI() {
     return;
   }
 
+  logAiTrace("Starting AI Smart Scan...", "info");
   listContainer.innerHTML = `<div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> Analyzing page with Google Gemini AI...</div>`;
 
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab) throw new Error("No active tab");
+
+    logAiTrace(`Active Tab: "${(tab.title || "").substring(0, 40)}" (${tab.url || ""})`, "info");
 
     const results = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
@@ -742,6 +814,10 @@ async function scanCurrentPageWithGeminiAI() {
       throw new Error("No readable text found on page.");
     }
 
+    logAiTrace(`DOM extracted: text sample size = ${textSample.length} characters.`, "info");
+
+    const compactText = textSample.substring(0, 8000).replace(/[ \t]+/g, " ");
+
     const aiPrompt = `You are an expert AI assistant that parses concert, theater, spectacles, and events from web pages.
 Extract the exact details from the following web page and return ONLY a strict JSON object.
 
@@ -749,7 +825,7 @@ PAGE TITLE: ${pageData.title || tab.title || ""}
 PAGE URL: ${tab.url || ""}
 PAGE CONTENT:
 """
-${textSample.substring(0, 8000).replace(/[ \t]+/g, " ")}
+${compactText}
 """
 
 REQUIREMENTS:
@@ -785,6 +861,7 @@ JSON FORMAT:
     let successfulModel = null;
 
     if (lastWorkingGeminiModel) {
+      logAiTrace(`Trying cached model: ${lastWorkingGeminiModel}...`, "info");
       aiResponse = await callGeminiApi(apiKey, lastWorkingGeminiModel, aiPrompt, 1);
       if (aiResponse) {
         successfulModel = lastWorkingGeminiModel;
@@ -793,10 +870,12 @@ JSON FORMAT:
 
     // 2. If no cached model worked, discover and iterate candidates
     if (!aiResponse) {
+      logAiTrace("Discovering available Gemini models on account...", "info");
       let candidateModels = await getAllAvailableGeminiModels(apiKey);
       if (!candidateModels || candidateModels.length === 0) {
         candidateModels = ["gemini-3.6-flash", "gemini-3.6-pro", "gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-flash"];
       }
+      logAiTrace(`Candidates to try: ${candidateModels.join(", ")}`, "info");
 
       for (const model of candidateModels) {
         if (model === lastWorkingGeminiModel) continue;
@@ -809,11 +888,12 @@ JSON FORMAT:
     }
 
     if (successfulModel) {
-      // Cache the working model for instant future calls (1-2s response time)
       chrome.storage.local.set({ lastWorkingGeminiModel: successfulModel });
+      logAiTrace(`Model ${successfulModel} validated and cached.`, "info");
     }
 
     if (!aiResponse) {
+      logAiTrace("All Gemini model requests failed or timed out.", "err");
       throw new Error("Gemini API is currently busy. Please retry in a moment.");
     }
 
@@ -852,7 +932,12 @@ JSON FORMAT:
     }
 
     renderDetectedDates();
+
+    const totalDuration = Math.round(performance.now() - overallStartTime);
+    logAiTrace(`Success in ${totalDuration}ms: Title="${aiData.event_title || ""}", Venue="${aiData.location || ""}", Dates=${detectedEvents.length}`, "info");
   } catch (err) {
+    const totalDuration = Math.round(performance.now() - overallStartTime);
+    logAiTrace(`Error after ${totalDuration}ms: ${err.message}`, "err");
     listContainer.innerHTML = `<div class="text-danger small text-center py-2">AI Scan Error: ${escapeHtml(err.message)}</div>`;
   }
 }
@@ -892,7 +977,10 @@ async function callGeminiApi(apiKey, modelName, promptText, maxRetries = 2) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${apiKey}`;
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const startTime = performance.now();
     try {
+      logAiTrace(`POST /models/${cleanModel}:generateContent (attempt ${attempt + 1}/${maxRetries})...`, "req");
+
       const response = await fetch(url, {
         method: "POST",
         headers: {
@@ -912,18 +1000,24 @@ async function callGeminiApi(apiKey, modelName, promptText, maxRetries = 2) {
         })
       });
 
+      const elapsed = Math.round(performance.now() - startTime);
+
       if (response.ok) {
         const json = await response.json();
         const textContent = json.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (textContent) return textContent.trim();
+        if (textContent) {
+          logAiTrace(`HTTP 200 OK from ${cleanModel} in ${elapsed}ms (${textContent.length} chars).`, "res");
+          return textContent.trim();
+        }
       }
 
       const status = response.status;
       const errText = await response.text();
-      console.debug(`Gemini API candidate (${cleanModel}) returned status ${status}:`, errText);
+      logAiTrace(`HTTP ${status} from ${cleanModel} in ${elapsed}ms: ${errText.substring(0, 100)}...`, status === 503 || status === 429 ? "warn" : "err");
 
       // If 503 or 429, wait 1.2 second and retry
       if ((status === 503 || status === 429) && attempt < maxRetries - 1) {
+        logAiTrace(`Retrying ${cleanModel} in 1200ms (high demand)...`, "warn");
         await new Promise((r) => setTimeout(r, 1200));
         continue;
       }
@@ -931,7 +1025,8 @@ async function callGeminiApi(apiKey, modelName, promptText, maxRetries = 2) {
       // If 404 or other client error, don't retry this model
       break;
     } catch (e) {
-      console.debug(`Fetch exception for ${cleanModel}:`, e);
+      const elapsed = Math.round(performance.now() - startTime);
+      logAiTrace(`Fetch error for ${cleanModel} in ${elapsed}ms: ${e.message}`, "err");
       if (attempt < maxRetries - 1) {
         await new Promise((r) => setTimeout(r, 1200));
       }
