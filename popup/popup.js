@@ -770,10 +770,23 @@ JSON FORMAT:
   ]
 }`;
 
-    // Try Gemini 2.0 Flash then 1.5 Flash
-    let aiResponse = await callGeminiApi(apiKey, "gemini-2.0-flash", aiPrompt);
+    // Discover available model dynamically or use best fallback chain
+    const candidateModels = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash-latest", "gemini-1.5-flash"];
+    let aiResponse = null;
+
+    // Try dynamic discovery first
+    const discoveredModel = await getBestAvailableGeminiModel(apiKey);
+    if (discoveredModel) {
+      aiResponse = await callGeminiApi(apiKey, discoveredModel, aiPrompt);
+    }
+
+    // Fallback through candidate list if needed
     if (!aiResponse) {
-      aiResponse = await callGeminiApi(apiKey, "gemini-1.5-flash", aiPrompt);
+      for (const model of candidateModels) {
+        if (model === discoveredModel) continue;
+        aiResponse = await callGeminiApi(apiKey, model, aiPrompt);
+        if (aiResponse) break;
+      }
     }
 
     if (!aiResponse) {
@@ -820,9 +833,38 @@ JSON FORMAT:
   }
 }
 
+async function getBestAvailableGeminiModel(apiKey) {
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const models = data.models || [];
+    
+    // Filter for generateContent models
+    const contentModels = models.filter((m) => 
+      Array.isArray(m.supportedGenerationMethods) && 
+      m.supportedGenerationMethods.includes("generateContent")
+    );
+
+    // Prefer flash models
+    const flashModels = contentModels.filter((m) => m.name.toLowerCase().includes("flash"));
+    const listToPickFrom = flashModels.length > 0 ? flashModels : contentModels;
+
+    if (listToPickFrom.length > 0) {
+      // Pick the latest model name (strip "models/" prefix if present)
+      const chosen = listToPickFrom[0].name.replace(/^models\//, "");
+      return chosen;
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
 async function callGeminiApi(apiKey, modelName, promptText) {
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+    const cleanModel = modelName.replace(/^models\//, "");
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${apiKey}`;
     const response = await fetch(url, {
       method: "POST",
       headers: {
@@ -844,7 +886,7 @@ async function callGeminiApi(apiKey, modelName, promptText) {
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error(`Gemini API error (${modelName}):`, errText);
+      console.warn(`Gemini API error (${cleanModel}):`, errText);
       return null;
     }
 
