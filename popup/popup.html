@@ -278,14 +278,52 @@
         <!-- Extracted Dates List -->
         <div class="card shadow-sm">
           <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
-            <h3 class="h6 mb-0 fw-semibold">Detected Dates</h3>
+            <div class="d-flex align-items-center gap-2">
+              <h3 class="h6 mb-0 fw-semibold">Detected Dates</h3>
+              <button id="btn-toggle-manual-date" class="btn btn-sm btn-outline-primary py-0 px-2" style="font-size: 0.72rem;" title="Enter date manually">
+                + Manual Date
+              </button>
+            </div>
             <button id="events-open-selected-btn" class="btn btn-sm btn-success py-0 px-2" disabled>
               + Open in Calendar
             </button>
           </div>
-          <div class="card-body p-2" id="events-list-container">
-            <div class="text-muted small text-center py-3" id="events-empty-msg">
-              Click "AI Smart Scan" or select text on a website to extract dates.
+          <div class="card-body p-2">
+            <!-- Manual Date Input Box -->
+            <div id="manual-date-container" class="border rounded p-2 mb-2 bg-light d-none">
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="small fw-semibold text-secondary" style="font-size: 0.72rem;">Manual Date Entry</span>
+                <button type="button" class="btn-close" id="btn-close-manual-date" style="font-size: 0.60rem;" aria-label="Close"></button>
+              </div>
+              <div class="row g-1 mb-1">
+                <div class="col-7">
+                  <label class="form-label mb-0 text-muted" style="font-size: 0.68rem;" for="manual-date-input">Date</label>
+                  <input type="date" id="manual-date-input" class="form-control form-control-sm py-1">
+                </div>
+                <div class="col-5">
+                  <label class="form-label mb-0 text-muted" style="font-size: 0.68rem;" for="manual-time-input">Time</label>
+                  <input type="time" id="manual-time-input" class="form-control form-control-sm py-1" value="20:00">
+                </div>
+              </div>
+              <div class="mb-2">
+                <label class="form-label mb-0 text-muted" style="font-size: 0.68rem;" for="manual-text-input">Or type free text date</label>
+                <input type="text" id="manual-text-input" class="form-control form-control-sm py-1" placeholder="e.g. 16/10/2026 20h30 or 16 oct 2026">
+              </div>
+              <div class="d-flex justify-content-end gap-1">
+                <button id="btn-add-manual-date" class="btn btn-sm btn-primary py-0 px-2" style="font-size: 0.75rem;">
+                  + Add Date
+                </button>
+                <button id="btn-add-open-manual-date" class="btn btn-sm btn-success py-0 px-2" style="font-size: 0.75rem;">
+                  Add &amp; Open
+                </button>
+              </div>
+              <div id="manual-date-error" class="text-danger small mt-1 d-none" style="font-size: 0.72rem;"></div>
+            </div>
+
+            <div id="events-list-container">
+              <div class="text-muted small text-center py-3" id="events-empty-msg">
+                Click "AI Smart Scan" or select text on a website to extract dates.
+              </div>
             </div>
           </div>
         </div>

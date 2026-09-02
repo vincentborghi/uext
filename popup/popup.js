@@ -793,6 +793,136 @@ function setupEventsModule() {
   if (openSelectedBtn) {
     openSelectedBtn.addEventListener("click", openSelectedDatesInCalendar);
   }
+
+  setupManualDateFeature();
+}
+
+function setupManualDateFeature() {
+  const toggleBtn = document.getElementById("btn-toggle-manual-date");
+  const closeBtn = document.getElementById("btn-close-manual-date");
+  const manualContainer = document.getElementById("manual-date-container");
+  const addBtn = document.getElementById("btn-add-manual-date");
+  const addOpenBtn = document.getElementById("btn-add-open-manual-date");
+  const dateInput = document.getElementById("manual-date-input");
+  const timeInput = document.getElementById("manual-time-input");
+  const textInput = document.getElementById("manual-text-input");
+
+  if (toggleBtn && manualContainer) {
+    toggleBtn.addEventListener("click", () => {
+      manualContainer.classList.toggle("d-none");
+      if (!manualContainer.classList.contains("d-none")) {
+        if (dateInput) dateInput.focus();
+      }
+    });
+  }
+
+  if (closeBtn && manualContainer) {
+    closeBtn.addEventListener("click", () => {
+      manualContainer.classList.add("d-none");
+    });
+  }
+
+  if (addBtn) {
+    addBtn.addEventListener("click", () => {
+      const newEvt = parseManualDateInput();
+      if (newEvt) {
+        if (!detectedEvents.some((e) => e.start.getTime() === newEvt.start.getTime())) {
+          detectedEvents.push(newEvt);
+          detectedEvents.sort((a, b) => a.start.getTime() - b.start.getTime());
+        }
+        renderDetectedDates();
+        if (textInput) textInput.value = "";
+      }
+    });
+  }
+
+  if (addOpenBtn) {
+    addOpenBtn.addEventListener("click", () => {
+      const newEvt = parseManualDateInput();
+      if (newEvt) {
+        if (!detectedEvents.some((e) => e.start.getTime() === newEvt.start.getTime())) {
+          detectedEvents.push(newEvt);
+          detectedEvents.sort((a, b) => a.start.getTime() - b.start.getTime());
+        }
+        renderDetectedDates();
+        openGoogleCalendarForEvents([newEvt]);
+      }
+    });
+  }
+
+  const handleKeydown = (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (addBtn) addBtn.click();
+    }
+  };
+
+  if (textInput) textInput.addEventListener("keydown", handleKeydown);
+  if (dateInput) dateInput.addEventListener("keydown", handleKeydown);
+  if (timeInput) timeInput.addEventListener("keydown", handleKeydown);
+}
+
+function parseManualDateInput() {
+  const dateInput = document.getElementById("manual-date-input");
+  const timeInput = document.getElementById("manual-time-input");
+  const textInput = document.getElementById("manual-text-input");
+  const errorEl = document.getElementById("manual-date-error");
+
+  if (errorEl) {
+    errorEl.textContent = "";
+    errorEl.classList.add("d-none");
+  }
+
+  const dateVal = dateInput ? dateInput.value.trim() : "";
+  const timeVal = timeInput ? timeInput.value.trim() : "20:00";
+  const textVal = textInput ? textInput.value.trim() : "";
+
+  // 1. Check HTML5 date input
+  if (dateVal) {
+    const parts = dateVal.split("-");
+    if (parts.length === 3) {
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10);
+      const day = parseInt(parts[2], 10);
+
+      let hour = 20;
+      let minute = 0;
+      if (timeVal) {
+        const timeParts = timeVal.split(":");
+        if (timeParts.length >= 2) {
+          hour = parseInt(timeParts[0], 10) || 20;
+          minute = parseInt(timeParts[1], 10) || 0;
+        }
+      }
+
+      if (year >= 2000 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        const startDate = new Date(year, month - 1, day, hour, minute);
+        const endDate = new Date(startDate.getTime() + 2 * 3600 * 1000);
+        const label = startDate.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long", year: "numeric" });
+        return {
+          id: "evt_manual_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+          label: label,
+          start: startDate,
+          end: endDate,
+          raw: startDate.toISOString()
+        };
+      }
+    }
+  }
+
+  // 2. Check free text input with regex parser
+  if (textVal) {
+    const extracted = extractDatesFromMetadata({ sample: textVal, selection: "" });
+    if (extracted && extracted.length > 0) {
+      return extracted[0];
+    }
+  }
+
+  if (errorEl) {
+    errorEl.textContent = "Please pick a date or type a valid date (e.g. 16/10/2026 or 16 oct 2026).";
+    errorEl.classList.remove("d-none");
+  }
+  return null;
 }
 
 function toggleDebugConsoleVisibility(show) {
@@ -1619,12 +1749,17 @@ function extractDatesFromMetadata(pageData) {
 function renderDetectedDates() {
   const container = document.getElementById("events-list-container");
   const openSelectedBtn = document.getElementById("events-open-selected-btn");
+  const manualContainer = document.getElementById("manual-date-container");
 
   if (detectedEvents.length === 0) {
+    if (manualContainer) {
+      manualContainer.classList.remove("d-none");
+    }
+
     const banner = document.getElementById("selection-focus-banner");
     const hasActiveSelection = banner && !banner.classList.contains("d-none");
     if (hasActiveSelection) {
-      container.innerHTML = `<div class="text-muted small text-center py-3">No dates detected in selection. Select text containing a date, or click <a href="#" id="events-empty-scan-all" class="text-primary text-decoration-none fw-semibold">Scan full page</a>.</div>`;
+      container.innerHTML = `<div class="text-muted small text-center py-3">No dates detected in selection. You can enter a date manually above, or click <a href="#" id="events-empty-scan-all" class="text-primary text-decoration-none fw-semibold">Scan full page</a>.</div>`;
       const scanAllLink = document.getElementById("events-empty-scan-all");
       if (scanAllLink) {
         scanAllLink.addEventListener("click", (e) => {
@@ -1633,7 +1768,7 @@ function renderDetectedDates() {
         });
       }
     } else {
-      container.innerHTML = `<div class="text-muted small text-center py-3">No dates detected on this page. You can select date text on the page and click Scan again.</div>`;
+      container.innerHTML = `<div class="text-muted small text-center py-3">No dates detected automatically. You can enter a date manually above or select text on the page.</div>`;
     }
     openSelectedBtn.disabled = true;
     return;
