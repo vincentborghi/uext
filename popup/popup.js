@@ -48,12 +48,33 @@ async function loadActiveTabInfo() {
 
 function setupNavigation() {
   const tabs = document.querySelectorAll('#nav-tabs button');
+  
   tabs.forEach((tabBtn) => {
-    tabBtn.addEventListener('click', () => {
+    tabBtn.addEventListener('shown.bs.tab', (event) => {
+      const targetId = event.target.getAttribute('data-bs-target');
+      if (targetId) {
+        chrome.storage.local.set({ lastActiveTab: targetId });
+      }
       if (tabBtn.id === 'tab-bnf-btn') {
         loadActiveTabInfo();
       }
     });
+  });
+
+  // Restore the last active tab
+  chrome.storage.local.get({ lastActiveTab: '#tab-fip' }, (res) => {
+    const lastTabTarget = res.lastActiveTab || '#tab-fip';
+    if (lastTabTarget && lastTabTarget !== '#tab-fip') {
+      const targetBtn = document.querySelector(`#nav-tabs button[data-bs-target="${lastTabTarget}"]`);
+      if (targetBtn) {
+        if (window.bootstrap && window.bootstrap.Tab) {
+          const tabInstance = bootstrap.Tab.getOrCreateInstance(targetBtn);
+          tabInstance.show();
+        } else {
+          targetBtn.click();
+        }
+      }
+    }
   });
 }
 
