@@ -36,33 +36,51 @@ async function loadActiveTabInfo() {
         bnfUrlEl.textContent = tab.url || "No active URL";
       }
 
+      // Check for pending calendar selection from context menu
+      const storageRes = await chrome.storage.local.get({ pendingCalendarSelection: "" });
+      let pendingSel = (storageRes.pendingCalendarSelection || "").trim();
+      if (pendingSel) {
+        await chrome.storage.local.remove("pendingCalendarSelection");
+      }
+
       // Try smart page extraction on the active tab
       if (tab.url && !tab.url.startsWith("chrome://") && !tab.url.startsWith("edge://")) {
         try {
           const results = await chrome.scripting.executeScript({
             target: { tabId: tab.id },
-            func: runSmartPageExtractor
+            func: runSmartPageExtractor,
+            args: [false]
           });
-          const pageData = results?.[0]?.result;
-          if (pageData) {
-            const eventTitleEl = document.getElementById("event-input-title");
-            const eventLocationEl = document.getElementById("event-input-location");
+          const pageData = results?.[0]?.result || {};
 
-            if (eventTitleEl && pageData.formattedTitle) {
-              eventTitleEl.value = pageData.formattedTitle;
-            } else if (eventTitleEl && pageData.title && (!eventTitleEl.value || eventTitleEl.value.startsWith("www."))) {
-              eventTitleEl.value = pageData.title;
+          if (pendingSel) {
+            pageData.selection = pendingSel;
+            pageData.sample = pendingSel;
+            const targetBtn = document.querySelector('#nav-tabs button[data-bs-target="#tab-events"]');
+            if (targetBtn && window.bootstrap && window.bootstrap.Tab) {
+              bootstrap.Tab.getOrCreateInstance(targetBtn).show();
             }
+          }
 
-            if (eventLocationEl && pageData.location) {
-              eventLocationEl.value = pageData.location;
-            }
+          updateSelectionBanner(pageData.selection, false);
 
-            // If structured dates or sample text exists, pre-detect
-            if ((pageData.structuredDates && pageData.structuredDates.length > 0) || pageData.sample) {
-              detectedEvents = extractDatesFromMetadata(pageData);
-              renderDetectedDates();
-            }
+          const eventTitleEl = document.getElementById("event-input-title");
+          const eventLocationEl = document.getElementById("event-input-location");
+
+          if (eventTitleEl && pageData.formattedTitle) {
+            eventTitleEl.value = pageData.formattedTitle;
+          } else if (eventTitleEl && pageData.title && (!eventTitleEl.value || eventTitleEl.value.startsWith("www."))) {
+            eventTitleEl.value = pageData.title;
+          }
+
+          if (eventLocationEl && pageData.location) {
+            eventLocationEl.value = pageData.location;
+          }
+
+          // If structured dates or sample text exists, pre-detect
+          if ((pageData.structuredDates && pageData.structuredDates.length > 0) || pageData.sample) {
+            detectedEvents = extractDatesFromMetadata(pageData);
+            renderDetectedDates();
           }
         } catch (e) {
           // Fallback simple title
@@ -79,6 +97,52 @@ async function loadActiveTabInfo() {
   }
 }
 
+function updateSelectionBanner(selectionText, isFullPageForce = false) {
+  const banner = document.getElementById("selection-focus-banner");
+  const countEl = document.getElementById("selection-char-count");
+  if (!banner) return;
+  const hasSel = Boolean(selectionText && selectionText.trim().length > 0 && !isFullPageForce);
+  if (hasSel) {
+    if (countEl) countEl.textContent = String(selectionText.trim().length);
+    banner.classList.remove("d-none");
+  } else {
+    banner.classList.add("d-none");
+  }
+}
+
+async function refreshCalendarExtractionFromTab() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab || !tab.url || tab.url.startsWith("chrome://") || tab.url.startsWith("edge://")) return;
+
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: runSmartPageExtractor,
+      args: [false]
+    });
+    const pageData = results?.[0]?.result;
+    if (pageData) {
+      updateSelectionBanner(pageData.selection, false);
+      if (pageData.selection && pageData.selection.trim().length > 0) {
+        const eventTitleEl = document.getElementById("event-input-title");
+        const eventLocationEl = document.getElementById("event-input-location");
+
+        if (eventTitleEl && pageData.formattedTitle) {
+          eventTitleEl.value = pageData.formattedTitle;
+        }
+        if (eventLocationEl && pageData.location) {
+          eventLocationEl.value = pageData.location;
+        }
+
+        detectedEvents = extractDatesFromMetadata(pageData);
+        renderDetectedDates();
+      }
+    }
+  } catch (e) {
+    // Ignore errors on non-accessible pages
+  }
+}
+
 function setupNavigation() {
   const tabs = document.querySelectorAll('#nav-tabs button');
   
@@ -90,6 +154,9 @@ function setupNavigation() {
       }
       if (tabBtn.id === 'tab-bnf-btn') {
         loadActiveTabInfo();
+      }
+      if (tabBtn.id === 'tab-events-btn') {
+        refreshCalendarExtractionFromTab();
       }
     });
   });
@@ -715,7 +782,12 @@ function setupEventsModule() {
   }
 
   if (scanBtn) {
-    scanBtn.addEventListener("click", scanCurrentPageForDates);
+    scanBtn.addEventListener("click", () => scanCurrentPageForDates(false));
+  }
+
+  const fullPageBtn = document.getElementById("btn-scan-full-page");
+  if (fullPageBtn) {
+    fullPageBtn.addEventListener("click", () => scanCurrentPageForDates(true));
   }
 
   if (openSelectedBtn) {
@@ -812,39 +884,59 @@ async function scanCurrentPageWithGeminiAI() {
 
     const results = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      func: runSmartPageExtractor
+      func: runSmartPageExtractor,
+      args: [false]
     });
 
     const pageData = results?.[0]?.result || {};
-    const textSample = pageData.sample || "";
+    const hasSelection = Boolean(pageData.selection && pageData.selection.trim().length > 0);
+    const textSample = hasSelection ? pageData.selection.trim() : (pageData.sample || "");
 
-    if (!textSample || textSample.length < 10) {
-      throw new Error("No readable text found on page.");
+    if (!textSample || textSample.length < 5) {
+      throw new Error(hasSelection ? "Selected text is too short to analyze." : "No readable text found on page.");
     }
 
-    logAiTrace(`DOM extracted: text sample size = ${textSample.length} characters.`, "info");
+    logAiTrace(hasSelection
+      ? `Active selection detected (${textSample.length} characters). Focusing AI on selection...`
+      : `DOM extracted: text sample size = ${textSample.length} characters.`, "info");
 
     const compactText = textSample.substring(0, 8000).replace(/[ \t]+/g, " ");
 
-    const aiPrompt = `You are an expert AI assistant that parses concert, theater, spectacles, and events from web pages.
-Extract the exact details from the following web page and return ONLY a strict JSON object.
+    let promptContext = "";
+    if (hasSelection) {
+      promptContext = `IMPORTANT INSTRUCTION: The user has selected a specific text section on the page.
+You MUST focus EXCLUSIVELY on the event, performer, title, venue, and dates described in this SELECTED TEXT.
+Do not use generic page titles if this selection contains an event title or artist.
 
-PAGE TITLE: ${pageData.title || tab.title || ""}
+PAGE TITLE (context only): ${pageData.title || tab.title || ""}
+PAGE URL (context only): ${tab.url || ""}
+SELECTED TEXT (FOCUS TARGET):
+"""
+${compactText}
+"""`;
+    } else {
+      promptContext = `PAGE TITLE: ${pageData.title || tab.title || ""}
 PAGE URL: ${tab.url || ""}
 PAGE CONTENT:
 """
 ${compactText}
-"""
+"""`;
+    }
+
+    const aiPrompt = `You are an expert AI assistant that parses concert, theater, spectacles, and events from web pages.
+Extract the exact details from the following web page content and return ONLY a strict JSON object.
+
+${promptContext}
 
 REQUIREMENTS:
-1. "event_type": Type of event: "Théâtre", "Concert", "Opéra", "Danse", "Humour", "Conférence", "Festival", "Exposition", or "Spectacle".
+1. "event_type": Type of event: "Theatre", "Concert", "Opera", "Dance", "Comedy", "Conference", "Festival", "Exposition", or "Spectacle".
 2. "event_title": Short clean title formatted according to the event type:
-   - Theater/Play: "Théâtre : <Play Name> / <City>" (or "<Play Name> / <City>")
+   - Theater/Play: "Theatre : <Play Name> / <City>" (or "<Play Name> / <City>")
    - Concert/Music: "Concert <Artist/Band> / <City>"
-   - Opera: "Opéra : <Opera Name> / <City>"
-   - Dance/Ballet: "Danse : <Show Name> / <City>"
+   - Opera: "Opera : <Opera Name> / <City>"
+   - Dance/Ballet: "Dance : <Show Name> / <City>"
    - Comedy: "Spectacle <Artist> / <City>"
-   - Conference: "Conférence : <Title> / <City>"
+   - Conference: "Conference : <Title> / <City>"
    - Festival: "Festival <Name> / <City>"
    - Generic/Other: "<Show/Event Name> / <City>"
    MAXIMUM 50 characters. NEVER include pricing, ticket categories (e.g. Assis/Debout), discounts, TVA, or boilerplate.
@@ -852,7 +944,7 @@ REQUIREMENTS:
 4. "venue": Specific venue or hall name (e.g. "La Source - Grande Salle").
 5. "city": City or town name (e.g. "Fontaine").
 6. "location": Combined concise string, e.g. "Fontaine (La Source - Grande Salle)". NEVER include prices or ticket text.
-7. "events": Array of all performance dates and times found on this page. For each event:
+7. "events": Array of all performance dates and times found. For each event:
    - "label": Readable date (e.g. "jeu. 8 octobre 2026").
    - "start_iso": Exact local datetime in ISO 8601 format: "YYYY-MM-DDTHH:mm:ss" (e.g. "2026-10-08T20:30:00"). If start hour is not specified, default to 20:00:00.
    - "end_iso": Exact local end datetime in ISO 8601 format: "YYYY-MM-DDTHH:mm:ss" (usually start + 2 hours).
@@ -1055,12 +1147,13 @@ async function callGeminiApi(apiKey, modelName, promptText, maxRetries = 2) {
   return null;
 }
 
-async function scanCurrentPageForDates() {
+async function scanCurrentPageForDates(forceFullPage = false) {
   const listContainer = document.getElementById("events-list-container");
   const eventTitleInput = document.getElementById("event-input-title");
   const eventLocationInput = document.getElementById("event-input-location");
 
-  listContainer.innerHTML = `<div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> Scanning page...</div>`;
+  const scanLabel = forceFullPage ? "page" : "selection/page";
+  listContainer.innerHTML = `<div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> Scanning ${scanLabel}...</div>`;
 
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -1068,10 +1161,12 @@ async function scanCurrentPageForDates() {
 
     const results = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      func: runSmartPageExtractor
+      func: runSmartPageExtractor,
+      args: [Boolean(forceFullPage)]
     });
 
     const pageData = results?.[0]?.result || {};
+    updateSelectionBanner(pageData.selection, forceFullPage);
 
     // 1. Fill Event Title and Location
     if (pageData.formattedTitle) {
@@ -1093,7 +1188,7 @@ async function scanCurrentPageForDates() {
 }
 
 // Function injected into the active page DOM
-function runSmartPageExtractor() {
+function runSmartPageExtractor(forceIgnoreSelection = false) {
   const data = {
     title: "",
     artist: "",
@@ -1106,16 +1201,24 @@ function runSmartPageExtractor() {
     selection: ""
   };
 
-  const sel = window.getSelection() ? window.getSelection().toString().trim() : "";
+  let sel = "";
+  if (!forceIgnoreSelection) {
+    if (window.getSelection()) {
+      sel = window.getSelection().toString().trim();
+    }
+    if (!sel && document.activeElement && typeof document.activeElement.selectionStart === "number") {
+      sel = document.activeElement.value.substring(document.activeElement.selectionStart, document.activeElement.selectionEnd).trim();
+    }
+  }
   data.selection = sel;
 
   const isGarbage = (text) => {
     if (!text || typeof text !== "string") return true;
     const t = text.toLowerCase();
     const forbidden = [
-      "€", "eur", "tarif", "billet", "catégorie", "categorie", "mixte", "assis", "debout",
-      "tva", "frais", "panier", "choix des places", "chômeur", "chomeur", "aah", "senior",
-      "étudiant", "etudiant", "jeune", "présenté par", "presente par", "producteur"
+      "eur", "tarif", "billet", "categorie", "mixte", "assis", "debout",
+      "tva", "frais", "panier", "choix des places", "chomeur", "aah", "senior",
+      "etudiant", "jeune", "presente par", "producteur"
     ];
     return forbidden.some((f) => t.includes(f)) || text.length > 70 || text.includes("\n");
   };
@@ -1165,6 +1268,20 @@ function runSmartPageExtractor() {
     } catch (e) {}
   });
 
+  // Filter structured dates if there is an active selection
+  if (sel.length > 0) {
+    data.structuredDates = data.structuredDates.filter((sd) => {
+      if (sd.name && sel.toLowerCase().includes(sd.name.toLowerCase())) return true;
+      if (sd.start) {
+        const datePart = sd.start.split("T")[0];
+        const parts = datePart.split("-");
+        const altDate = parts.length === 3 ? `${parts[2]}/${parts[1]}` : "";
+        if (sel.includes(datePart) || (altDate && sel.includes(altDate))) return true;
+      }
+      return false;
+    });
+  }
+
   // 2. Open Graph & Meta tags
   const ogTitle = document.querySelector('meta[property="og:title"]')?.getAttribute("content");
   const metaTitle = document.querySelector('meta[name="title"]')?.getAttribute("content");
@@ -1201,7 +1318,7 @@ function runSmartPageExtractor() {
   // 4. Clean Text Pattern Search for "FONTAINE | La Source - Grande Salle"
   const bodyText = (document.body.innerText || "").substring(0, 30000);
   if (!data.location || isGarbage(data.location)) {
-    const locMatch = bodyText.match(/\b([A-ZÀ-Ÿ\s\-]{3,25})\s*\|\s*([A-Za-zÀ-ÿ0-9\s\-–\(\)]{3,45})/);
+    const locMatch = bodyText.match(/\b([A-Z\s\-]{3,25})\s*\|\s*([A-Za-z0-9\s\-\u2013\u2014\(\)]{3,45})/);
     if (locMatch) {
       const c = locMatch[1].trim();
       const v = locMatch[2].trim();
@@ -1226,11 +1343,40 @@ function runSmartPageExtractor() {
     }
   }
 
+  // If there is an active text selection, extract title/venue from it
+  if (sel.length > 0) {
+    const textWithoutDates = sel
+      .replace(/(?:du\s+)?\d{1,2}\s+(?:au\s+\d{1,2}\s+)?[a-zA-Z\u00C0-\u017F]+(?:\s+\d{4})?/gi, "")
+      .replace(/\b\d{1,2}[\/\.-]\d{1,2}(?:[\/\.-]\d{2,4})?\b/g, "")
+      .replace(/\b\d{4}[-\/]\d{1,2}[-\/]\d{1,2}\b/g, "")
+      .replace(/(?:[\|\-,\u2013\u2014/:]|at|vers)?\s*\d{1,2}[h:]\d{2}\b/gi, "")
+      .replace(/\b(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|lun|mar|mer|jeu|ven|sam|dim)\b/gi, "")
+      .replace(/\b(?:billetterie|billet|tickets|reserver|reservation|tarifs?|places?)\b/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const cleanRemainder = textWithoutDates
+      .replace(/^[\s\-\u2013\u2014|/\u2022:,]+|[\s\-\u2013\u2014|/\u2022:,]+$/g, "")
+      .trim();
+
+    if (cleanRemainder.length >= 3 && cleanRemainder.length <= 120 && !isGarbage(cleanRemainder)) {
+      const parts = cleanRemainder.split(/\s*[\-\u2013\u2014|/\u2022]\s*/).filter(Boolean);
+      if (parts.length >= 2) {
+        data.title = parts[0].trim();
+        data.artist = parts[0].trim();
+        data.location = parts.slice(1).join(" - ").trim();
+      } else {
+        data.title = cleanRemainder;
+        data.artist = cleanRemainder;
+      }
+    }
+  }
+
   // 5. Clean up title from platform boilerplates
   if (data.title) {
     data.title = data.title
-      .replace(/\s*[-–|•:]\s*(?:Billetterie|Tickets|Billeterie|Ticketmaster|Eventim|Fnac Spectacles|Shotgun|Dice|BilletReduc|Digitick|Seetickets|See Tickets|France Billet|Official Site|Site Officiel|Reservation|Achat de billets|Aperçu|Tournée|Tour).*$/i, "")
-      .replace(/^www\.[a-z0-9\-]+\.[a-z]{2,4}\s*[-–|:]\s*/i, "")
+      .replace(/\s*[\-\u2013|\u2022:]\s*(?:Billetterie|Tickets|Billeterie|Ticketmaster|Eventim|Fnac Spectacles|Shotgun|Dice|BilletReduc|Digitick|Seetickets|See Tickets|France Billet|Official Site|Site Officiel|Reservation|Achat de billets|Apercu|Tournee|Tour).*$/i, "")
+      .replace(/^www\.[a-z0-9\-]+\.[a-z]{2,4}\s*[\-\u2013|:]\s*/i, "")
       .trim();
   }
 
@@ -1245,12 +1391,12 @@ function runSmartPageExtractor() {
   }
 
   // 6. Detect event category dynamically
-  const lowerContext = (data.title + " " + data.artist + " " + window.location.href + " " + bodyText.substring(0, 4000)).toLowerCase();
+  const lowerContext = (data.title + " " + data.artist + " " + window.location.href + " " + (sel.length > 0 ? sel : bodyText.substring(0, 4000))).toLowerCase();
   let prefix = "";
-  if (lowerContext.includes("theatre") || lowerContext.includes("théâtre") || lowerContext.includes("piece de theatre") || lowerContext.includes("pièce de théâtre") || lowerContext.includes("comedie-francaise")) {
-    prefix = "Théâtre : ";
-  } else if (lowerContext.includes("opera") || lowerContext.includes("opéra")) {
-    prefix = "Opéra : ";
+  if (lowerContext.includes("theatre") || lowerContext.includes("piece de theatre") || lowerContext.includes("comedie-francaise")) {
+    prefix = "Theatre : ";
+  } else if (lowerContext.includes("opera")) {
+    prefix = "Opera : ";
   } else if (lowerContext.includes("ballet") || lowerContext.includes("danse contemporaine") || lowerContext.includes("choregraphie")) {
     prefix = "Danse : ";
   } else if (lowerContext.includes("humour") || lowerContext.includes("stand up") || lowerContext.includes("stand-up") || lowerContext.includes("one man show") || lowerContext.includes("one woman show")) {
@@ -1259,15 +1405,15 @@ function runSmartPageExtractor() {
     prefix = "Expo ";
   } else if (lowerContext.includes("festival")) {
     prefix = "Festival ";
-  } else if (lowerContext.includes("conference") || lowerContext.includes("conférence") || lowerContext.includes("debat") || lowerContext.includes("débat")) {
-    prefix = "Conférence : ";
-  } else if (lowerContext.includes("concert") || lowerContext.includes("musique") || lowerContext.includes("album") || lowerContext.includes("tournee") || lowerContext.includes("tournée") || lowerContext.includes("live") || lowerContext.includes("orchestre")) {
+  } else if (lowerContext.includes("conference") || lowerContext.includes("debat")) {
+    prefix = "Conference : ";
+  } else if (lowerContext.includes("concert") || lowerContext.includes("musique") || lowerContext.includes("album") || lowerContext.includes("tournee") || lowerContext.includes("live") || lowerContext.includes("orchestre")) {
     prefix = "Concert ";
   }
 
   // 7. Build clean smart title
   let mainSubject = data.artist || data.title || "Spectacle";
-  mainSubject = mainSubject.replace(/^(?:Concert|Spectacle|Festival|Théâtre|Theatre|Opéra|Opera|Danse|Expo|Conférence|Conference)\s*[:\-]?\s*/i, "").trim();
+  mainSubject = mainSubject.replace(/^(?:Concert|Spectacle|Festival|Theatre|Opera|Danse|Expo|Conference)\s*[:\-]?\s*/i, "").trim();
   const cleanCity = data.city && !isGarbage(data.city) ? data.city : "";
 
   if (cleanCity) {
@@ -1284,17 +1430,17 @@ function runSmartPageExtractor() {
 
 const MONTH_MAP = {
   janvier: 1, janv: 1, jan: 1,
-  fevrier: 2, "fevrier": 2, "février": 2, fevr: 2, feb: 2,
+  fevrier: 2, fevr: 2, feb: 2,
   mars: 3, mar: 3,
   avril: 4, avr: 4, apr: 4,
   mai: 5, may: 5,
   juin: 6, jun: 6,
   juillet: 7, juil: 7, jul: 7,
-  aout: 8, "aout": 8, "août": 8, aou: 8, aug: 8,
+  aout: 8, aou: 8, aug: 8,
   septembre: 9, sept: 9, sep: 9,
   octobre: 10, oct: 10,
   novembre: 11, nov: 11,
-  decembre: 12, "decembre": 12, "décembre": 12, dec: 12
+  decembre: 12, dec: 12
 };
 
 function extractDatesFromMetadata(pageData) {
@@ -1302,9 +1448,24 @@ function extractDatesFromMetadata(pageData) {
   const events = [];
   let eventIdx = 0;
 
+  const hasSelection = Boolean(pageData.selection && pageData.selection.trim().length > 0);
+  const selectionText = hasSelection ? pageData.selection.trim() : "";
+
   // 1. Structured JSON-LD Dates (100% precise)
   if (pageData.structuredDates && pageData.structuredDates.length > 0) {
-    pageData.structuredDates.forEach((sd) => {
+    const datesToProcess = hasSelection
+      ? pageData.structuredDates.filter((sd) => {
+          if (!sd.start) return false;
+          const datePart = sd.start.split("T")[0];
+          const parts = datePart.split("-");
+          const altDate = parts.length === 3 ? `${parts[2]}/${parts[1]}` : "";
+          const nameMatch = sd.name && selectionText.toLowerCase().includes(sd.name.toLowerCase());
+          const dateMatch = selectionText.includes(datePart) || (altDate && selectionText.includes(altDate));
+          return nameMatch || dateMatch;
+        })
+      : pageData.structuredDates;
+
+    datesToProcess.forEach((sd) => {
       try {
         const start = new Date(sd.start);
         if (!isNaN(start.getTime())) {
@@ -1325,10 +1486,14 @@ function extractDatesFromMetadata(pageData) {
     });
   }
 
-  // 2. Text Regex Extraction (with robust time separator support: " | ", " à ", " - ")
-  const text = pageData.sample || "";
-  const rangePattern = /(?:du\s+)?(\d{1,2})\s+(?:au\s+(\d{1,2})\s+)?([a-zA-Z\u00C0-\u017F]+)(?:\s+(\d{4}))?(?:(?:\s*[\|\-,–—/àa@]\s*|\s+(?:à|a|at|vers|dès)\s*|\s+)(\d{1,2})[h:](\d{2})?)?/gi;
-  const numericPattern = /\b(\d{1,2})[\/\.-](\d{1,2})(?:[\/\.-](\d{2,4}))?(?:(?:\s*[\|\-,–—/àa@]\s*|\s+(?:à|a|at|vers|dès)\s*|\s+)(\d{1,2})[h:](\d{2})?)?\b/g;
+  // 2. Text Regex Extraction
+  // When a selection is present, we focus STRICTLY on the selected text
+  const rawText = hasSelection ? selectionText : (pageData.sample || "");
+  const text = rawText.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+  const rangePattern = /(?:du\s+)?(\d{1,2})\s+(?:au\s+(\d{1,2})\s+)?([a-zA-Z]+)(?:\s+(\d{4}))?(?:(?:\s*[\|\-,\u2013\u2014/:]\s*|\s+(?:a|at|vers|des)\s*|\s+)(\d{1,2})[h:](\d{2})?)?/gi;
+  const numericPattern = /\b(\d{1,2})[\/\.-](\d{1,2})(?:[\/\.-](\d{2,4}))?(?:(?:\s*[\|\-,\u2013\u2014/:]\s*|\s+(?:a|at|vers|des)\s*|\s+)(\d{1,2})[h:](\d{2})?)?\b/g;
+  const isoPattern = /\b(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})(?:[T\s](\d{1,2})[h:](\d{2}))?\b/g;
 
   let match;
 
@@ -1336,24 +1501,28 @@ function extractDatesFromMetadata(pageData) {
     const startDay = parseInt(match[1], 10);
     const endDay = match[2] ? parseInt(match[2], 10) : null;
     const rawMonth = match[3].toLowerCase();
-    const rawYear = match[4] ? parseInt(match[4], 10) : currentYear;
-    let hour = match[5] ? parseInt(match[5], 10) : null;
-    let minute = match[6] ? parseInt(match[6], 10) : 0;
-
-    // Check adjacent text for time like " | 20:30" if not captured directly
-    if (hour === null) {
-      const lookahead = text.substring(match.index + match[0].length, match.index + match[0].length + 30);
-      const timeMatch = lookahead.match(/^\s*(?:[\|\-,–—/:]|à|a|at|vers|dès)?\s*(\d{1,2})[h:](\d{2})\b/i);
-      if (timeMatch) {
-        hour = parseInt(timeMatch[1], 10);
-        minute = parseInt(timeMatch[2], 10);
-      } else {
-        hour = 20;
-      }
-    }
-
     const monthNum = MONTH_MAP[rawMonth];
+
     if (monthNum && startDay >= 1 && startDay <= 31) {
+      let rawYear = match[4] ? parseInt(match[4], 10) : currentYear;
+      if (!match[4] && monthNum < (new Date().getMonth() + 1)) {
+        rawYear = currentYear + 1;
+      }
+
+      let hour = match[5] ? parseInt(match[5], 10) : null;
+      let minute = match[6] ? parseInt(match[6], 10) : 0;
+
+      if (hour === null) {
+        const lookahead = text.substring(match.index + match[0].length, match.index + match[0].length + 30);
+        const timeMatch = lookahead.match(/^\s*(?:[\|\-,\u2013\u2014/:]|a|at|vers|des)?\s*(\d{1,2})[h:](\d{2})\b/i);
+        if (timeMatch) {
+          hour = parseInt(timeMatch[1], 10);
+          minute = parseInt(timeMatch[2], 10);
+        } else {
+          hour = 20;
+        }
+      }
+
       const startDate = new Date(rawYear, monthNum - 1, startDay, hour, minute);
       let endDate;
       if (endDay && endDay >= 1 && endDay <= 31) {
@@ -1378,22 +1547,47 @@ function extractDatesFromMetadata(pageData) {
   while ((match = numericPattern.exec(text)) !== null) {
     const day = parseInt(match[1], 10);
     const month = parseInt(match[2], 10);
-    let year = match[3] ? parseInt(match[3], 10) : currentYear;
-    if (year < 100) year += 2000;
-    let hour = match[4] ? parseInt(match[4], 10) : null;
-    let minute = match[5] ? parseInt(match[5], 10) : 0;
+    if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
+      let year = match[3] ? parseInt(match[3], 10) : currentYear;
+      if (year < 100) year += 2000;
+      if (!match[3] && month < (new Date().getMonth() + 1)) {
+        year = currentYear + 1;
+      }
 
-    // Check adjacent text for time like " | 20:30"
-    if (hour === null) {
-      const lookahead = text.substring(match.index + match[0].length, match.index + match[0].length + 30);
-      const timeMatch = lookahead.match(/^\s*(?:[\|\-,–—/:]|à|a|at|vers|dès)?\s*(\d{1,2})[h:](\d{2})\b/i);
-      if (timeMatch) {
-        hour = parseInt(timeMatch[1], 10);
-        minute = parseInt(timeMatch[2], 10);
-      } else {
-        hour = 20;
+      let hour = match[4] ? parseInt(match[4], 10) : null;
+      let minute = match[5] ? parseInt(match[5], 10) : 0;
+
+      if (hour === null) {
+        const lookahead = text.substring(match.index + match[0].length, match.index + match[0].length + 30);
+        const timeMatch = lookahead.match(/^\s*(?:[\|\-,\u2013\u2014/:]|a|at|vers|des)?\s*(\d{1,2})[h:](\d{2})\b/i);
+        if (timeMatch) {
+          hour = parseInt(timeMatch[1], 10);
+          minute = parseInt(timeMatch[2], 10);
+        } else {
+          hour = 20;
+        }
+      }
+
+      const startDate = new Date(year, month - 1, day, hour, minute);
+      const endDate = new Date(year, month - 1, day, hour + 2, minute);
+      if (!events.some((e) => e.start.getTime() === startDate.getTime())) {
+        events.push({
+          id: "evt_" + eventIdx++,
+          label: match[0].trim(),
+          start: startDate,
+          end: endDate,
+          raw: match[0]
+        });
       }
     }
+  }
+
+  while ((match = isoPattern.exec(text)) !== null) {
+    const year = parseInt(match[1], 10);
+    const month = parseInt(match[2], 10);
+    const day = parseInt(match[3], 10);
+    let hour = match[4] ? parseInt(match[4], 10) : 20;
+    let minute = match[5] ? parseInt(match[5], 10) : 0;
 
     if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
       const startDate = new Date(year, month - 1, day, hour, minute);
@@ -1419,7 +1613,20 @@ function renderDetectedDates() {
   const openSelectedBtn = document.getElementById("events-open-selected-btn");
 
   if (detectedEvents.length === 0) {
-    container.innerHTML = `<div class="text-muted small text-center py-3">No dates detected on this page. You can select date text on the page and click Scan again.</div>`;
+    const banner = document.getElementById("selection-focus-banner");
+    const hasActiveSelection = banner && !banner.classList.contains("d-none");
+    if (hasActiveSelection) {
+      container.innerHTML = `<div class="text-muted small text-center py-3">No dates detected in selection. Select text containing a date, or click <a href="#" id="events-empty-scan-all" class="text-primary text-decoration-none fw-semibold">Scan full page</a>.</div>`;
+      const scanAllLink = document.getElementById("events-empty-scan-all");
+      if (scanAllLink) {
+        scanAllLink.addEventListener("click", (e) => {
+          e.preventDefault();
+          scanCurrentPageForDates(true);
+        });
+      }
+    } else {
+      container.innerHTML = `<div class="text-muted small text-center py-3">No dates detected on this page. You can select date text on the page and click Scan again.</div>`;
+    }
     openSelectedBtn.disabled = true;
     return;
   }
@@ -1489,9 +1696,9 @@ function openGoogleCalendarForEvents(eventList) {
       baseTitle
     )}&dates=${startIso}/${endIso}&details=${encodeURIComponent(details)}&location=${encodeURIComponent(location)}`;
 
-    // If a target calendar name or ID is set, target that calendar
+    // If a target calendar ID is set, target that calendar without adding it as a guest
     if (calendarTarget) {
-      gcalUrl += `&src=${encodeURIComponent(calendarTarget)}&add=${encodeURIComponent(calendarTarget)}`;
+      gcalUrl += `&src=${encodeURIComponent(calendarTarget)}`;
     }
 
     chrome.tabs.create({ url: gcalUrl });

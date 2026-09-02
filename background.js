@@ -65,5 +65,19 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
         chrome.storage.local.set({ musicLibrary: list });
       });
     }
+  } else if (info.menuItemId === "swissknife-extract-calendar") {
+    const selectedText = (info.selectionText || "").trim();
+    if (selectedText) {
+      chrome.storage.local.set({
+        pendingCalendarSelection: selectedText,
+        lastActiveTab: "#tab-events"
+      }, () => {
+        if (chrome.action && chrome.action.openPopup) {
+          chrome.action.openPopup().catch(() => {
+            // Popup opening may be ignored if suppressed by browser
+          });
+        }
+      });
+    }
   }
 });
