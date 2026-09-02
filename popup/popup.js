@@ -744,11 +744,11 @@ ${textSample.substring(0, 16000)}
 """
 
 REQUIREMENTS:
-1. "event_title": Formatted clean title like "Concert <Artist/Show> / <City or Venue>". Example: "Concert Rodolphe Burger / Fontaine". Never use website domain.
-2. "artist": Name of the main performer, band, or show title.
+1. "event_title": Short clean title strictly formatted as "Concert <Artist/Show> / <City>". Example: "Concert Rodolphe Burger / Fontaine". MAXIMUM 50 characters. NEVER include pricing, ticket categories (e.g. Assis/Debout), discounts, TVA, or boilerplate.
+2. "artist": Short name of the main performer, band, or show title (e.g. "Rodolphe Burger").
 3. "venue": Specific venue or hall name (e.g. "La Source - Grande Salle").
-4. "city": City or town (e.g. "Fontaine").
-5. "location": Combined formatted string, e.g. "Fontaine (La Source - Grande Salle)".
+4. "city": City or town name (e.g. "Fontaine").
+5. "location": Combined concise string, e.g. "Fontaine (La Source - Grande Salle)". NEVER include prices or ticket text.
 6. "events": Array of all performance dates and times found on this page. For each event:
    - "label": Readable date (e.g. "jeu. 8 octobre 2026").
    - "start_iso": Exact local datetime in ISO 8601 format: "YYYY-MM-DDTHH:mm:ss" (e.g. "2026-10-08T20:30:00"). If start hour is not specified, default to 20:00:00.
@@ -911,6 +911,24 @@ function runSmartPageExtractor() {
   const sel = window.getSelection() ? window.getSelection().toString().trim() : "";
   data.selection = sel;
 
+  const isGarbage = (text) => {
+    if (!text || typeof text !== "string") return true;
+    const t = text.toLowerCase();
+    const forbidden = [
+      "€", "eur", "tarif", "billet", "catégorie", "categorie", "mixte", "assis", "debout",
+      "tva", "frais", "panier", "choix des places", "chômeur", "chomeur", "aah", "senior",
+      "étudiant", "etudiant", "jeune", "présenté par", "presente par", "producteur"
+    ];
+    return forbidden.some((f) => t.includes(f)) || text.length > 70 || text.includes("\n");
+  };
+
+  const cleanLeafText = (el) => {
+    if (!el) return "";
+    const txt = (el.innerText || el.textContent || "").trim();
+    if (isGarbage(txt)) return "";
+    return txt.replace(/\s+/g, " ");
+  };
+
   // 1. Check Schema.org JSON-LD scripts for structured Event
   const ldScripts = document.querySelectorAll('script[type="application/ld+json"]');
   ldScripts.forEach((script) => {
@@ -936,12 +954,12 @@ function runSmartPageExtractor() {
             const locName = item.location.name ? item.location.name.trim() : "";
             const addr = item.location.address || {};
             const locality = addr.addressLocality ? addr.addressLocality.trim() : "";
-            if (locality) data.city = locality;
-            if (locName) data.venue = locName;
-            if (locality && locName && !locName.toLowerCase().includes(locality.toLowerCase())) {
-              data.location = `${locality} (${locName})`;
+            if (locality && !isGarbage(locality)) data.city = locality;
+            if (locName && !isGarbage(locName)) data.venue = locName;
+            if (data.city && data.venue && !data.venue.toLowerCase().includes(data.city.toLowerCase())) {
+              data.location = `${data.city} (${data.venue})`;
             } else {
-              data.location = locName || locality;
+              data.location = data.venue || data.city;
             }
           }
         }
@@ -953,42 +971,60 @@ function runSmartPageExtractor() {
   const ogTitle = document.querySelector('meta[property="og:title"]')?.getAttribute("content");
   const metaTitle = document.querySelector('meta[name="title"]')?.getAttribute("content");
 
-  // 3. Headings & Selectors
-  const h1 = document.querySelector("h1")?.innerText?.trim();
-  const eventTitleEl = document.querySelector('[class*="event-title"], [class*="eventTitle"], [class*="eventName"], [class*="show-title"]')?.innerText?.trim();
-  const artistEl = document.querySelector('[class*="artist"], [class*="performer"], [class*="headliner"]')?.innerText?.trim();
-  const venueEl = document.querySelector('[class*="venue"], [class*="location"], [class*="place"], [class*="hall"], [class*="salle"]')?.innerText?.trim();
-  const cityEl = document.querySelector('[class*="city"], [class*="ville"], [class*="locality"]')?.innerText?.trim();
+  // 3. Headings & Leaf Selectors
+  const h1El = document.querySelector("h1");
+  const h1 = cleanLeafText(h1El);
+
+  const eventTitleEl = document.querySelector('h1, [class*="event-title"], [class*="eventTitle"], [class*="eventName"], [class*="show-title"]');
+  const cleanTitleFromDom = cleanLeafText(eventTitleEl);
+
+  const artistEl = document.querySelector('[class*="artist-name"], [class*="artistName"], [class*="headliner"]');
+  const cleanArtistFromDom = cleanLeafText(artistEl);
+
+  const venueEl = document.querySelector('[class*="venue-name"], [class*="venueName"], [class*="hall-name"]');
+  const cleanVenueFromDom = cleanLeafText(venueEl);
+
+  const cityEl = document.querySelector('[class*="city-name"], [class*="cityName"], [class*="locality"]');
+  const cleanCityFromDom = cleanLeafText(cityEl);
 
   if (!data.title) {
-    data.title = eventTitleEl || h1 || ogTitle || metaTitle || document.title || "";
+    data.title = cleanTitleFromDom || h1 || ogTitle || metaTitle || document.title || "";
   }
-  if (!data.artist && artistEl) {
-    data.artist = artistEl;
+  if (!data.artist && cleanArtistFromDom) {
+    data.artist = cleanArtistFromDom;
   }
-  if (!data.location) {
-    if (cityEl && venueEl && !venueEl.toLowerCase().includes(cityEl.toLowerCase())) {
-      data.location = `${cityEl} (${venueEl})`;
-    } else if (venueEl) {
-      data.location = venueEl;
-    } else if (cityEl) {
-      data.location = cityEl;
-    }
+  if (!data.city && cleanCityFromDom) {
+    data.city = cleanCityFromDom;
+  }
+  if (!data.venue && cleanVenueFromDom) {
+    data.venue = cleanVenueFromDom;
   }
 
-  // 4. Text Pattern Search for "CITY | Venue - Hall"
+  // 4. Clean Text Pattern Search for "FONTAINE | La Source - Grande Salle"
   const bodyText = (document.body.innerText || "").substring(0, 30000);
-  if (!data.location) {
-    const locMatch = bodyText.match(/\b([A-ZÀ-Ÿ\s\-]{3,20})\s*\|\s*([A-Za-zÀ-ÿ0-9\s\-–\(\)]{3,40})/);
+  if (!data.location || isGarbage(data.location)) {
+    const locMatch = bodyText.match(/\b([A-ZÀ-Ÿ\s\-]{3,25})\s*\|\s*([A-Za-zÀ-ÿ0-9\s\-–\(\)]{3,45})/);
     if (locMatch) {
       const c = locMatch[1].trim();
       const v = locMatch[2].trim();
-      const forbidden = ["billet", "tarif", "normal", "date", "heure", "prix", "contact"];
-      if (!forbidden.some((f) => c.toLowerCase().includes(f))) {
-        data.location = `${c} (${v})`;
+      if (!isGarbage(c) && !isGarbage(v)) {
         data.city = c;
         data.venue = v;
+        data.location = `${c} (${v})`;
       }
+    }
+  }
+
+  // Compose location if not set
+  if (!data.location || isGarbage(data.location)) {
+    if (data.city && data.venue && !data.venue.toLowerCase().includes(data.city.toLowerCase())) {
+      data.location = `${data.city} (${data.venue})`;
+    } else if (data.venue && !isGarbage(data.venue)) {
+      data.location = data.venue;
+    } else if (data.city && !isGarbage(data.city)) {
+      data.location = data.city;
+    } else {
+      data.location = "";
     }
   }
 
@@ -1000,8 +1036,8 @@ function runSmartPageExtractor() {
       .trim();
   }
 
-  // URL fallback slug
-  if (!data.title || data.title.startsWith("www.") || data.title.includes("http")) {
+  // URL fallback slug if title is bad
+  if (!data.title || data.title.startsWith("www.") || data.title.includes("http") || isGarbage(data.title)) {
     const parts = window.location.pathname.split("/").filter(Boolean);
     const slug = parts.find((p) => p.includes("-") && !/^\d+$/.test(p));
     if (slug) {
@@ -1010,13 +1046,15 @@ function runSmartPageExtractor() {
     }
   }
 
-  // 6. Build smart title (e.g. "Concert Rodolphe Burger / Fontaine")
+  // 6. Build clean smart title (e.g. "Concert Rodolphe Burger / Fontaine")
   let mainSubject = data.artist || data.title || "Spectacle";
   mainSubject = mainSubject.replace(/^(?:Concert|Spectacle|Festival)\s+/i, "").trim();
-  const cityOrVenue = data.city || (data.location ? data.location.split("(")[0].trim() : "");
+  const cleanCity = data.city && !isGarbage(data.city) ? data.city : "";
 
-  if (cityOrVenue) {
-    data.formattedTitle = `Concert ${mainSubject} / ${cityOrVenue}`;
+  if (cleanCity) {
+    data.formattedTitle = `Concert ${mainSubject} / ${cleanCity}`;
+  } else if (data.location && !isGarbage(data.location) && data.location.length < 35) {
+    data.formattedTitle = `Concert ${mainSubject} / ${data.location}`;
   } else {
     data.formattedTitle = `Concert ${mainSubject}`;
   }
