@@ -829,18 +829,29 @@ ${compactText}
 """
 
 REQUIREMENTS:
-1. "event_title": Short clean title strictly formatted as "Concert <Artist/Show> / <City>". Example: "Concert Rodolphe Burger / Fontaine". MAXIMUM 50 characters. NEVER include pricing, ticket categories (e.g. Assis/Debout), discounts, TVA, or boilerplate.
-2. "artist": Short name of the main performer, band, or show title (e.g. "Rodolphe Burger").
-3. "venue": Specific venue or hall name (e.g. "La Source - Grande Salle").
-4. "city": City or town name (e.g. "Fontaine").
-5. "location": Combined concise string, e.g. "Fontaine (La Source - Grande Salle)". NEVER include prices or ticket text.
-6. "events": Array of all performance dates and times found on this page. For each event:
+1. "event_type": Type of event: "Théâtre", "Concert", "Opéra", "Danse", "Humour", "Conférence", "Festival", "Exposition", or "Spectacle".
+2. "event_title": Short clean title formatted according to the event type:
+   - Theater/Play: "Théâtre : <Play Name> / <City>" (or "<Play Name> / <City>")
+   - Concert/Music: "Concert <Artist/Band> / <City>"
+   - Opera: "Opéra : <Opera Name> / <City>"
+   - Dance/Ballet: "Danse : <Show Name> / <City>"
+   - Comedy: "Spectacle <Artist> / <City>"
+   - Conference: "Conférence : <Title> / <City>"
+   - Festival: "Festival <Name> / <City>"
+   - Generic/Other: "<Show/Event Name> / <City>"
+   MAXIMUM 50 characters. NEVER include pricing, ticket categories (e.g. Assis/Debout), discounts, TVA, or boilerplate.
+3. "artist": Short name of the main performer, playwright, author, band, or show title.
+4. "venue": Specific venue or hall name (e.g. "La Source - Grande Salle").
+5. "city": City or town name (e.g. "Fontaine").
+6. "location": Combined concise string, e.g. "Fontaine (La Source - Grande Salle)". NEVER include prices or ticket text.
+7. "events": Array of all performance dates and times found on this page. For each event:
    - "label": Readable date (e.g. "jeu. 8 octobre 2026").
    - "start_iso": Exact local datetime in ISO 8601 format: "YYYY-MM-DDTHH:mm:ss" (e.g. "2026-10-08T20:30:00"). If start hour is not specified, default to 20:00:00.
    - "end_iso": Exact local end datetime in ISO 8601 format: "YYYY-MM-DDTHH:mm:ss" (usually start + 2 hours).
 
 JSON FORMAT:
 {
+  "event_type": "string",
   "event_title": "string",
   "artist": "string",
   "venue": "string",
@@ -1225,17 +1236,38 @@ function runSmartPageExtractor() {
     }
   }
 
-  // 6. Build clean smart title (e.g. "Concert Rodolphe Burger / Fontaine")
+  // 6. Detect event category dynamically
+  const lowerContext = (data.title + " " + data.artist + " " + window.location.href + " " + bodyText.substring(0, 4000)).toLowerCase();
+  let prefix = "";
+  if (lowerContext.includes("theatre") || lowerContext.includes("théâtre") || lowerContext.includes("piece de theatre") || lowerContext.includes("pièce de théâtre") || lowerContext.includes("comedie-francaise")) {
+    prefix = "Théâtre : ";
+  } else if (lowerContext.includes("opera") || lowerContext.includes("opéra")) {
+    prefix = "Opéra : ";
+  } else if (lowerContext.includes("ballet") || lowerContext.includes("danse contemporaine") || lowerContext.includes("choregraphie")) {
+    prefix = "Danse : ";
+  } else if (lowerContext.includes("humour") || lowerContext.includes("stand up") || lowerContext.includes("stand-up") || lowerContext.includes("one man show") || lowerContext.includes("one woman show")) {
+    prefix = "Spectacle ";
+  } else if (lowerContext.includes("expo") || lowerContext.includes("exposition")) {
+    prefix = "Expo ";
+  } else if (lowerContext.includes("festival")) {
+    prefix = "Festival ";
+  } else if (lowerContext.includes("conference") || lowerContext.includes("conférence") || lowerContext.includes("debat") || lowerContext.includes("débat")) {
+    prefix = "Conférence : ";
+  } else if (lowerContext.includes("concert") || lowerContext.includes("musique") || lowerContext.includes("album") || lowerContext.includes("tournee") || lowerContext.includes("tournée") || lowerContext.includes("live") || lowerContext.includes("orchestre")) {
+    prefix = "Concert ";
+  }
+
+  // 7. Build clean smart title
   let mainSubject = data.artist || data.title || "Spectacle";
-  mainSubject = mainSubject.replace(/^(?:Concert|Spectacle|Festival)\s+/i, "").trim();
+  mainSubject = mainSubject.replace(/^(?:Concert|Spectacle|Festival|Théâtre|Theatre|Opéra|Opera|Danse|Expo|Conférence|Conference)\s*[:\-]?\s*/i, "").trim();
   const cleanCity = data.city && !isGarbage(data.city) ? data.city : "";
 
   if (cleanCity) {
-    data.formattedTitle = `Concert ${mainSubject} / ${cleanCity}`;
+    data.formattedTitle = `${prefix}${mainSubject} / ${cleanCity}`;
   } else if (data.location && !isGarbage(data.location) && data.location.length < 35) {
-    data.formattedTitle = `Concert ${mainSubject} / ${data.location}`;
+    data.formattedTitle = `${prefix}${mainSubject} / ${data.location}`;
   } else {
-    data.formattedTitle = `Concert ${mainSubject}`;
+    data.formattedTitle = `${prefix}${mainSubject}`;
   }
 
   data.sample = sel.length > 0 ? sel : bodyText;
