@@ -1063,36 +1063,67 @@ async function scanCurrentPageWithGeminiAI() {
       throw new Error(hasSelection ? "Selected text is too short to analyze." : "No readable text or image found on page.");
     }
 
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const todayStr = `${dayNames[now.getDay()]}, ${now.getDate()} ${monthNames[now.getMonth()]} ${currentYear}`;
+
     let aiPrompt = "";
 
     if (imageObj) {
-      aiPrompt = `You are an expert AI assistant that analyzes event posters, flyers, concert announcements, and theater programs from images.
-Carefully inspect the provided image and extract all visible details about the event, artists/performers, venue, city, and dates.
+      aiPrompt = `You are an expert AI assistant specialized in analyzing event posters, flyers, concert announcements, workshops (stages/cours), and programs from images.
+Carefully inspect the provided image and extract all visible details about the event, artists/performers, venue, city, and schedules.
 Return ONLY a strict JSON object.
+
+CURRENT REFERENCE DATE: Today is ${todayStr}. Current year is ${currentYear}.
+
+CRITICAL DATE AND UPCOMING YEAR RULES:
+1. The event announced on this flyer is an UPCOMING event.
+2. If the year is explicitly printed on the flyer, use it.
+3. If the year is NOT printed on the flyer (e.g. only "Dimanche 27 septembre" or "20 septembre"):
+   - Determine the upcoming year relative to today (${todayStr}):
+     * If the month and day have not yet passed in ${currentYear}, use ${currentYear}.
+     * If the month and day have already passed in ${currentYear}, use ${currentYear + 1}.
+   - NEVER use past years (such as 2020, 2021, etc.)! Flyers found online are for upcoming events.
+
+CRITICAL TIME AND SCHEDULE RULES:
+1. Search the ENTIRE image thoroughly for specific times, schedules, and duration.
+   - Look for time ranges like "10h - 12h", "10h - 13h", "13h30 - 15h30", "14h", "20h30", "de 10h a 18h", etc.
+   - Look inside colored boxes, badges, text banners, and session descriptions.
+   - Daytime events, workshops, stages, and courses typically run during morning and afternoon (e.g. 10:00 to 12:00, 13:30 to 15:30).
+2. If the flyer lists MULTIPLE sessions, workshops, or time blocks on the same day:
+   - Create a distinct entry in "events" for EACH session so the user can select and add them individually to calendar:
+     Example for 2 workshops on 27 Sept:
+     Session 1: "label": "Danse traditionnelle (10h - 12h)", "session_name": "Danse traditionnelle", "start_iso": "${currentYear}-09-27T10:00:00", "end_iso": "${currentYear}-09-27T12:00:00"
+     Session 2: "label": "Doum danse (13h30 - 15h30)", "session_name": "Doum danse", "start_iso": "${currentYear}-09-27T13:30:00", "end_iso": "${currentYear}-09-27T15:30:00"
+3. If an explicit time range is given (e.g. "10h - 12h" or "10h - 13h"), you MUST use that exact start hour (10:00:00) and end hour (12:00:00 or 13:00:00).
+4. NEVER default to 20:00:00 when an actual time (such as 10h, 13h30, 14h, etc.) is visible anywhere on the flyer! Only default to 20:00:00 if absolutely no time of day is mentioned anywhere.
 
 PAGE TITLE (context): ${pageData.title || tab.title || ""}
 PAGE URL: ${tab.url || ""}
 
 REQUIREMENTS:
-1. "event_type": Type of event: "Theatre", "Concert", "Opera", "Dance", "Comedy", "Conference", "Festival", "Exposition", or "Spectacle".
-2. "event_title": Short clean title formatted according to the event type:
-   - Concert/Music: "<Artist/Band> / <City>" (NEVER prefix with "Concert", start directly with the artist or band name)
-   - Theater/Play: "Theatre : <Play Name> / <City>" (or "<Play Name> / <City>")
-   - Opera: "Opera : <Opera Name> / <City>"
-   - Dance/Ballet: "Dance : <Show Name> / <City>"
+1. "event_type": Type of event: "Stage", "Danse", "Concert", "Theatre", "Opera", "Comedy", "Conference", "Festival", "Exposition", or "Spectacle".
+2. "event_title": Short clean title formatted according to event type:
+   - Concert/Music: "<Artist/Band> / <City>" (NEVER prefix with "Concert", start directly with artist or band name)
+   - Workshop/Stage: "Stage <Discipline/Theme> : <Artist/Teacher> / <City>" (e.g. "Stage Danse : Medson Coulibaly / Fontaine")
+   - Dance/Ballet: "Danse : <Show/Artist> / <City>"
+   - Theater/Play: "Theatre : <Play Name> / <City>"
    - Comedy: "Spectacle <Artist> / <City>"
    - Conference: "Conference : <Title> / <City>"
    - Festival: "Festival <Name> / <City>"
    - Generic/Other: "<Show/Event Name> / <City>"
    MAXIMUM 50 characters. NEVER include pricing, ticket categories, or boilerplate.
-3. "artist": Short name of the main performer, band, playwright, or show title visible on the poster.
-4. "venue": Specific venue or hall name (e.g. "Zehntscheuer", "La Source", "Olympia").
-5. "city": City or town name (e.g. "Ravensburg", "Fontaine", "Paris").
-6. "location": Combined concise string, e.g. "Ravensburg (Zehntscheuer)".
-7. "events": Array of all performance dates and times found on the poster. For each event:
-   - "label": Readable date in French or English (e.g. "ven. 16 octobre 2026").
-   - "start_iso": Exact local datetime in ISO 8601 format: "YYYY-MM-DDTHH:mm:ss" (e.g. "2026-10-16T20:00:00"). If start hour is not specified on poster, default to 20:00:00.
-   - "end_iso": Exact local end datetime in ISO 8601 format: "YYYY-MM-DDTHH:mm:ss" (usually start + 2 hours).
+3. "artist": Name of the main artist, teacher, performer, band, or speaker (e.g. "Medson Coulibaly").
+4. "venue": Specific venue or hall name (e.g. "Salle Emile Bert", "Zehntscheuer", "La Source").
+5. "city": City or town name (e.g. "Fontaine", "Ravensburg", "Paris").
+6. "location": Combined concise string, e.g. "Fontaine (Salle Emile Bert)".
+7. "events": Array of all performance or workshop sessions found. For each:
+   - "label": Clear readable label (e.g. "Dimanche 27 sept - Danse traditionnelle (10h - 12h)").
+   - "session_name": Specific session or workshop name if applicable (e.g. "Danse traditionnelle", "Doum danse").
+   - "start_iso": Local datetime in ISO 8601 format: "YYYY-MM-DDTHH:mm:ss".
+   - "end_iso": Local datetime in ISO 8601 format: "YYYY-MM-DDTHH:mm:ss".
 
 JSON FORMAT:
 {
@@ -1105,6 +1136,7 @@ JSON FORMAT:
   "events": [
     {
       "label": "string",
+      "session_name": "string",
       "start_iso": "string",
       "end_iso": "string"
     }
@@ -1138,31 +1170,50 @@ ${compactText}
 """`;
       }
 
-      aiPrompt = `You are an expert AI assistant that parses concert, theater, spectacles, and events from web pages.
+      aiPrompt = `You are an expert AI assistant that parses concert, theater, spectacles, workshops, and events from web pages.
 Extract the exact details from the following web page content and return ONLY a strict JSON object.
+
+CURRENT REFERENCE DATE: Today is ${todayStr}. Current year is ${currentYear}.
+
+CRITICAL DATE AND UPCOMING YEAR RULES:
+- The event being parsed is an UPCOMING event.
+- If the year is explicitly written on the page, use it.
+- If the year is NOT written on the page (e.g. only "27 septembre" or "20 septembre"):
+  * If the month and day have not yet passed in ${currentYear}, use ${currentYear}.
+  * If the month and day have already passed in ${currentYear}, use ${currentYear + 1}.
+  * NEVER use a past year (such as 2020, 2021, etc.).
+
+CRITICAL TIME AND SCHEDULE RULES:
+- Search carefully for specific times and schedules (e.g. "10h - 12h", "10h - 13h", "13h30 - 15h30", "14h", "20h30").
+- Morning and afternoon events typically run during daytime (e.g. 10:00, 13:30, 14:00).
+- If multiple sessions or workshops are mentioned on the same day, create a separate entry in "events" for each session.
+- If an exact start and end hour are indicated (e.g. "10h - 12h" or "10h - 13h"), use that exact start hour (10:00:00) and end hour (12:00:00 or 13:00:00).
+- ONLY default to 20:00:00 if absolutely no time or schedule is mentioned anywhere.
 
 ${promptContext}
 
 REQUIREMENTS:
-1. "event_type": Type of event: "Theatre", "Concert", "Opera", "Dance", "Comedy", "Conference", "Festival", "Exposition", or "Spectacle".
+1. "event_type": Type of event: "Stage", "Danse", "Concert", "Theatre", "Opera", "Comedy", "Conference", "Festival", "Exposition", or "Spectacle".
 2. "event_title": Short clean title formatted according to the event type:
-   - Theater/Play: "Theatre : <Play Name> / <City>" (or "<Play Name> / <City>")
    - Concert/Music: "<Artist/Band> / <City>" (NEVER prefix with "Concert", start directly with the artist or band name)
+   - Workshop/Stage: "Stage <Discipline/Theme> : <Artist/Teacher> / <City>" (e.g. "Stage Danse : Medson Coulibaly / Fontaine")
+   - Dance/Ballet: "Danse : <Show Name> / <City>"
+   - Theater/Play: "Theatre : <Play Name> / <City>" (or "<Play Name> / <City>")
    - Opera: "Opera : <Opera Name> / <City>"
-   - Dance/Ballet: "Dance : <Show Name> / <City>"
    - Comedy: "Spectacle <Artist> / <City>"
    - Conference: "Conference : <Title> / <City>"
    - Festival: "Festival <Name> / <City>"
    - Generic/Other: "<Show/Event Name> / <City>"
    MAXIMUM 50 characters. NEVER include pricing, ticket categories (e.g. Assis/Debout), discounts, TVA, or boilerplate.
-3. "artist": Short name of the main performer, playwright, author, band, or show title.
-4. "venue": Specific venue or hall name (e.g. "La Source - Grande Salle").
-5. "city": City or town name (e.g. "Fontaine").
-6. "location": Combined concise string, e.g. "Fontaine (La Source - Grande Salle)". NEVER include prices or ticket text.
-7. "events": Array of all performance dates and times found. For each event:
-   - "label": Readable date (e.g. "jeu. 8 octobre 2026").
-   - "start_iso": Exact local datetime in ISO 8601 format: "YYYY-MM-DDTHH:mm:ss" (e.g. "2026-10-08T20:30:00"). If start hour is not specified, default to 20:00:00.
-   - "end_iso": Exact local end datetime in ISO 8601 format: "YYYY-MM-DDTHH:mm:ss" (usually start + 2 hours).
+3. "artist": Short name of the main performer, teacher, playwright, author, band, or show title.
+4. "venue": Specific venue or hall name (e.g. "Salle Emile Bert", "La Source - Grande Salle").
+5. "city": City or town name (e.g. "Fontaine", "Paris").
+6. "location": Combined concise string, e.g. "Fontaine (Salle Emile Bert)". NEVER include prices or ticket text.
+7. "events": Array of all performance or workshop sessions found. For each:
+   - "label": Readable date (e.g. "dim. 27 septembre 2026 (10h - 12h)").
+   - "session_name": Specific session or workshop name if applicable (e.g. "Danse traditionnelle", "Doum danse").
+   - "start_iso": Exact local datetime in ISO 8601 format: "YYYY-MM-DDTHH:mm:ss".
+   - "end_iso": Exact local end datetime in ISO 8601 format: "YYYY-MM-DDTHH:mm:ss".
 
 JSON FORMAT:
 {
@@ -1175,6 +1226,7 @@ JSON FORMAT:
   "events": [
     {
       "label": "string",
+      "session_name": "string",
       "start_iso": "string",
       "end_iso": "string"
     }
@@ -1242,16 +1294,30 @@ JSON FORMAT:
     if (Array.isArray(aiData.events) && aiData.events.length > 0) {
       aiData.events.forEach((evt) => {
         try {
-          const startDate = new Date(evt.start_iso);
-          if (!isNaN(startDate.getTime())) {
-            let endDate = evt.end_iso ? new Date(evt.end_iso) : null;
-            if (!endDate || isNaN(endDate.getTime())) {
-              endDate = new Date(startDate.getTime() + 2 * 3600 * 1000);
+          const resolved = resolveUpcomingEventDate(evt.start_iso, evt.end_iso);
+          if (resolved) {
+            const startDate = resolved.start;
+            const endDate = resolved.end;
+            const sessionName = (evt.session_name || "").trim();
+
+            const formattedDate = startDate.toLocaleDateString("fr-FR", {
+              weekday: "short",
+              day: "numeric",
+              month: "long",
+              year: "numeric"
+            });
+            const startTimeStr = startDate.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+            const endTimeStr = endDate.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+
+            let label = evt.label || formattedDate;
+            if (sessionName && !label.toLowerCase().includes(sessionName.toLowerCase())) {
+              label = `${label} - ${sessionName}`;
             }
-            const label = evt.label || startDate.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long", year: "numeric" });
+
             detectedEvents.push({
               id: "evt_ai_" + eventIdx++,
               label: label,
+              sessionName: sessionName,
               start: startDate,
               end: endDate,
               raw: evt.start_iso
@@ -1813,6 +1879,36 @@ const MONTH_MAP = {
   decembre: 12, dec: 12
 };
 
+function resolveUpcomingEventDate(rawStartDate, rawEndDate) {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+
+  let start = new Date(rawStartDate);
+  if (isNaN(start.getTime())) return null;
+
+  let end = rawEndDate ? new Date(rawEndDate) : null;
+  if (!end || isNaN(end.getTime())) {
+    end = new Date(start.getTime() + 2 * 3600 * 1000);
+  }
+
+  // If parsed year is in the past (e.g. 2020), adjust to current or next upcoming year
+  if (start.getFullYear() < currentYear) {
+    let targetYear = currentYear;
+    // Check if this date has already passed this year (with 7 days margin for ongoing events)
+    const testDate = new Date(currentYear, start.getMonth(), start.getDate(), start.getHours(), start.getMinutes());
+    if (testDate.getTime() < (now.getTime() - 7 * 86400 * 1000)) {
+      targetYear = currentYear + 1;
+    }
+    const yearDiff = targetYear - start.getFullYear();
+    start.setFullYear(targetYear);
+    if (end) {
+      end.setFullYear(end.getFullYear() + yearDiff);
+    }
+  }
+
+  return { start, end };
+}
+
 function extractDatesFromMetadata(pageData) {
   const currentYear = new Date().getFullYear();
   const events = [];
@@ -1837,12 +1933,10 @@ function extractDatesFromMetadata(pageData) {
 
     datesToProcess.forEach((sd) => {
       try {
-        const start = new Date(sd.start);
-        if (!isNaN(start.getTime())) {
-          let end = sd.end ? new Date(sd.end) : null;
-          if (!end || isNaN(end.getTime())) {
-            end = new Date(start.getTime() + 2 * 3600 * 1000);
-          }
+        const resolved = resolveUpcomingEventDate(sd.start, sd.end);
+        if (resolved) {
+          const start = resolved.start;
+          const end = resolved.end;
           const label = start.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long", year: "numeric" });
           events.push({
             id: "evt_" + eventIdx++,
@@ -2019,13 +2113,17 @@ function renderDetectedDates() {
       month: "long",
       year: "numeric"
     });
-    const formattedTime = evt.start.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+    const startTimeStr = evt.start.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+    const endTimeStr = evt.end ? evt.end.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "";
+    const timeDisplay = endTimeStr && endTimeStr !== startTimeStr ? `${startTimeStr} - ${endTimeStr}` : startTimeStr;
+
+    const sessionBadge = evt.sessionName ? `<span class="badge bg-light text-primary border ms-1">${escapeHtml(evt.sessionName)}</span>` : "";
 
     item.innerHTML = `
       <div class="form-check d-flex align-items-center gap-2 mb-0">
         <input class="form-check-input evt-checkbox" type="checkbox" value="${evt.id}" id="chk-${evt.id}" checked>
         <label class="form-check-label small cursor-pointer" for="chk-${evt.id}">
-          <span class="fw-semibold">${formattedDate}</span> <span class="text-muted">(${formattedTime})</span>
+          <span class="fw-semibold">${formattedDate}</span> <span class="text-muted">(${timeDisplay})</span>${sessionBadge}
         </label>
       </div>
       <button class="btn btn-sm btn-outline-primary py-0 px-2 btn-single-gcal" style="font-size: 0.75rem;">
@@ -2067,8 +2165,13 @@ function openGoogleCalendarForEvents(eventList) {
     const startIso = formatGoogleCalendarDate(evt.start);
     const endIso = formatGoogleCalendarDate(evt.end);
 
+    let eventTitle = baseTitle;
+    if (evt.sessionName && !eventTitle.toLowerCase().includes(evt.sessionName.toLowerCase())) {
+      eventTitle = `${eventTitle} - ${evt.sessionName}`;
+    }
+
     let gcalUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(
-      baseTitle
+      eventTitle
     )}&dates=${startIso}/${endIso}&details=${encodeURIComponent(details)}&location=${encodeURIComponent(location)}`;
 
     // If a target calendar ID is set, target that calendar without adding it as a guest
