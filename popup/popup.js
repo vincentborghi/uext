@@ -82,12 +82,23 @@ async function loadActiveTabInfo() {
             detectedEvents = extractDatesFromMetadata(pageData);
             renderDetectedDates();
           }
+
+          // If image page detected, guide user to click AI Smart Scan
+          if (pageData.isImagePage || (tab.url && /\.(jpe?g|png|webp|gif|bmp|avif)(\?.*)?$/i.test(tab.url))) {
+            const emptyMsg = document.getElementById("events-empty-msg");
+            if (emptyMsg && detectedEvents.length === 0) {
+              emptyMsg.innerHTML = `<span class="text-primary fw-semibold">Image flyer detected.</span> Click <strong>AI Smart Scan</strong> above to analyze this poster with Gemini Vision.`;
+            }
+          }
         } catch (e) {
           // Fallback simple title
           const eventTitleEl = document.getElementById("event-input-title");
           if (eventTitleEl && !eventTitleEl.value && tab.title) {
-            const cleanTitle = tab.title.replace(/\s*[\-\u2013|].*$/, "").replace(/^concert\s*[:\-]?\s*/i, "").trim();
-            eventTitleEl.value = cleanTitle || tab.title;
+            const isFileTitle = /\.(jpe?g|png|webp|gif|bmp)(\?.*)?$/i.test(tab.title) || /^\d{6,}/.test(tab.title);
+            if (!isFileTitle) {
+              const cleanTitle = tab.title.replace(/\s*[\-\u2013|].*$/, "").replace(/^concert\s*[:\-]?\s*/i, "").trim();
+              eventTitleEl.value = cleanTitle || tab.title;
+            }
           }
         }
       }
@@ -1012,29 +1023,103 @@ async function scanCurrentPageWithGeminiAI() {
 
     logAiTrace(`Active Tab: "${(tab.title || "").substring(0, 40)}" (${tab.url || ""})`, "info");
 
-    const results = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: runSmartPageExtractor,
-      args: [false]
-    });
+    const isDirectImageUrl = Boolean(tab.url && /\.(jpe?g|png|webp|gif|bmp|avif)(\?.*)?$/i.test(tab.url));
 
-    const pageData = results?.[0]?.result || {};
-    const hasSelection = Boolean(pageData.selection && pageData.selection.trim().length > 0);
-    const textSample = hasSelection ? pageData.selection.trim() : (pageData.sample || "");
-
-    if (!textSample || textSample.length < 5) {
-      throw new Error(hasSelection ? "Selected text is too short to analyze." : "No readable text found on page.");
+    let pageData = {};
+    try {
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: runSmartPageExtractor,
+        args: [false]
+      });
+      pageData = results?.[0]?.result || {};
+    } catch (e) {
+      logAiTrace(`Note: Script injection skipped (${e.message})`, "info");
     }
 
-    logAiTrace(hasSelection
-      ? `Active selection detected (${textSample.length} characters). Focusing AI on selection...`
-      : `DOM extracted: text sample size = ${textSample.length} characters.`, "info");
+    const hasSelection = Boolean(pageData.selection && pageData.selection.trim().length > 0);
+    const textSample = hasSelection ? pageData.selection.trim() : (pageData.sample || "");
+    const isImageTarget = Boolean(pageData.isImagePage || isDirectImageUrl);
 
-    const compactText = textSample.substring(0, 8000).replace(/[ \t]+/g, " ");
+    let imageObj = null;
 
-    let promptContext = "";
-    if (hasSelection) {
-      promptContext = `IMPORTANT INSTRUCTION: The user has selected a specific text section on the page.
+    if (isImageTarget && !hasSelection) {
+      logAiTrace("Image poster/flyer detected. Extracting image for multimodal Gemini Vision...", "info");
+      if (pageData.imageBase64) {
+        imageObj = {
+          base64: pageData.imageBase64,
+          mimeType: pageData.imageMimeType || "image/jpeg"
+        };
+      } else {
+        const targetUrl = pageData.imageUrl || tab.url;
+        logAiTrace(`Fetching image from ${targetUrl.substring(0, 70)}...`, "info");
+        imageObj = await fetchAndResizeImage(targetUrl);
+      }
+      const kbSize = Math.round((imageObj.base64.length * 0.75) / 1024);
+      logAiTrace(`Image prepared successfully (${kbSize} KB). Multimodal Vision activated.`, "info");
+    }
+
+    if (!imageObj && (!textSample || textSample.length < 5)) {
+      throw new Error(hasSelection ? "Selected text is too short to analyze." : "No readable text or image found on page.");
+    }
+
+    let aiPrompt = "";
+
+    if (imageObj) {
+      aiPrompt = `You are an expert AI assistant that analyzes event posters, flyers, concert announcements, and theater programs from images.
+Carefully inspect the provided image and extract all visible details about the event, artists/performers, venue, city, and dates.
+Return ONLY a strict JSON object.
+
+PAGE TITLE (context): ${pageData.title || tab.title || ""}
+PAGE URL: ${tab.url || ""}
+
+REQUIREMENTS:
+1. "event_type": Type of event: "Theatre", "Concert", "Opera", "Dance", "Comedy", "Conference", "Festival", "Exposition", or "Spectacle".
+2. "event_title": Short clean title formatted according to the event type:
+   - Concert/Music: "<Artist/Band> / <City>" (NEVER prefix with "Concert", start directly with the artist or band name)
+   - Theater/Play: "Theatre : <Play Name> / <City>" (or "<Play Name> / <City>")
+   - Opera: "Opera : <Opera Name> / <City>"
+   - Dance/Ballet: "Dance : <Show Name> / <City>"
+   - Comedy: "Spectacle <Artist> / <City>"
+   - Conference: "Conference : <Title> / <City>"
+   - Festival: "Festival <Name> / <City>"
+   - Generic/Other: "<Show/Event Name> / <City>"
+   MAXIMUM 50 characters. NEVER include pricing, ticket categories, or boilerplate.
+3. "artist": Short name of the main performer, band, playwright, or show title visible on the poster.
+4. "venue": Specific venue or hall name (e.g. "Zehntscheuer", "La Source", "Olympia").
+5. "city": City or town name (e.g. "Ravensburg", "Fontaine", "Paris").
+6. "location": Combined concise string, e.g. "Ravensburg (Zehntscheuer)".
+7. "events": Array of all performance dates and times found on the poster. For each event:
+   - "label": Readable date in French or English (e.g. "ven. 16 octobre 2026").
+   - "start_iso": Exact local datetime in ISO 8601 format: "YYYY-MM-DDTHH:mm:ss" (e.g. "2026-10-16T20:00:00"). If start hour is not specified on poster, default to 20:00:00.
+   - "end_iso": Exact local end datetime in ISO 8601 format: "YYYY-MM-DDTHH:mm:ss" (usually start + 2 hours).
+
+JSON FORMAT:
+{
+  "event_type": "string",
+  "event_title": "string",
+  "artist": "string",
+  "venue": "string",
+  "city": "string",
+  "location": "string",
+  "events": [
+    {
+      "label": "string",
+      "start_iso": "string",
+      "end_iso": "string"
+    }
+  ]
+}`;
+    } else {
+      logAiTrace(hasSelection
+        ? `Active selection detected (${textSample.length} characters). Focusing AI on selection...`
+        : `DOM extracted: text sample size = ${textSample.length} characters.`, "info");
+
+      const compactText = textSample.substring(0, 8000).replace(/[ \t]+/g, " ");
+
+      let promptContext = "";
+      if (hasSelection) {
+        promptContext = `IMPORTANT INSTRUCTION: The user has selected a specific text section on the page.
 You MUST focus EXCLUSIVELY on the event, performer, title, venue, and dates described in this SELECTED TEXT.
 Do not use generic page titles if this selection contains an event title or artist.
 
@@ -1044,16 +1129,16 @@ SELECTED TEXT (FOCUS TARGET):
 """
 ${compactText}
 """`;
-    } else {
-      promptContext = `PAGE TITLE: ${pageData.title || tab.title || ""}
+      } else {
+        promptContext = `PAGE TITLE: ${pageData.title || tab.title || ""}
 PAGE URL: ${tab.url || ""}
 PAGE CONTENT:
 """
 ${compactText}
 """`;
-    }
+      }
 
-    const aiPrompt = `You are an expert AI assistant that parses concert, theater, spectacles, and events from web pages.
+      aiPrompt = `You are an expert AI assistant that parses concert, theater, spectacles, and events from web pages.
 Extract the exact details from the following web page content and return ONLY a strict JSON object.
 
 ${promptContext}
@@ -1095,6 +1180,7 @@ JSON FORMAT:
     }
   ]
 }`;
+    }
 
     // 1. Check if we already have a cached working model
     const { lastWorkingGeminiModel } = await chrome.storage.local.get({ lastWorkingGeminiModel: "" });
@@ -1103,7 +1189,7 @@ JSON FORMAT:
 
     if (lastWorkingGeminiModel) {
       logAiTrace(`Trying cached model: ${lastWorkingGeminiModel}...`, "info");
-      aiResponse = await callGeminiApi(apiKey, lastWorkingGeminiModel, aiPrompt, 1);
+      aiResponse = await callGeminiApi(apiKey, lastWorkingGeminiModel, aiPrompt, 1, imageObj);
       if (aiResponse) {
         successfulModel = lastWorkingGeminiModel;
       }
@@ -1114,13 +1200,13 @@ JSON FORMAT:
       logAiTrace("Discovering available Gemini models on account...", "info");
       let candidateModels = await getAllAvailableGeminiModels(apiKey);
       if (!candidateModels || candidateModels.length === 0) {
-        candidateModels = ["gemini-3.6-flash", "gemini-3.6-pro", "gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-flash"];
+        candidateModels = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-flash", "gemini-1.5-pro"];
       }
       logAiTrace(`Candidates to try: ${candidateModels.join(", ")}`, "info");
 
       for (const model of candidateModels) {
         if (model === lastWorkingGeminiModel) continue;
-        aiResponse = await callGeminiApi(apiKey, model, aiPrompt, 1);
+        aiResponse = await callGeminiApi(apiKey, model, aiPrompt, 1, imageObj);
         if (aiResponse) {
           successfulModel = model;
           break;
@@ -1220,32 +1306,109 @@ async function getAllAvailableGeminiModels(apiKey) {
   }
 }
 
-async function callGeminiApi(apiKey, modelName, promptText, maxRetries = 2) {
+async function fetchAndResizeImage(imageUrl) {
+  const res = await fetch(imageUrl);
+  if (!res.ok) throw new Error(`HTTP ${res.status} fetching image`);
+  const blob = await res.blob();
+  const mimeType = blob.type || "image/jpeg";
+
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(blob);
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      try {
+        const maxDim = 1600;
+        let w = img.naturalWidth || img.width;
+        let h = img.naturalHeight || img.height;
+        if (w > maxDim || h > maxDim) {
+          if (w > h) {
+            h = Math.round((h * maxDim) / w);
+            w = maxDim;
+          } else {
+            w = Math.round((w * maxDim) / h);
+            h = maxDim;
+          }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+        resolve({
+          base64: dataUrl.split(",")[1],
+          mimeType: "image/jpeg"
+        });
+      } catch (e) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const dataUrl = reader.result;
+          resolve({
+            base64: dataUrl.split(",")[1],
+            mimeType: mimeType
+          });
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      }
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const dataUrl = reader.result;
+        resolve({
+          base64: dataUrl.split(",")[1],
+          mimeType: mimeType
+        });
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    };
+    img.src = objectUrl;
+  });
+}
+
+async function callGeminiApi(apiKey, modelName, promptText, maxRetries = 2, imageObj = null) {
   const cleanModel = modelName.replace(/^models\//, "");
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${apiKey}`;
+
+  const parts = [];
+  if (imageObj && imageObj.base64) {
+    parts.push({
+      inlineData: {
+        mimeType: imageObj.mimeType || "image/jpeg",
+        data: imageObj.base64
+      }
+    });
+  }
+  parts.push({ text: promptText });
+
+  const requestBody = {
+    contents: [
+      {
+        role: "user",
+        parts: parts
+      }
+    ],
+    generationConfig: {
+      responseMimeType: "application/json",
+      temperature: 0.1
+    }
+  };
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const startTime = performance.now();
     try {
-      logAiTrace(`POST /models/${cleanModel}:generateContent (attempt ${attempt + 1}/${maxRetries})...`, "req");
+      logAiTrace(`POST /models/${cleanModel}:generateContent (attempt ${attempt + 1}/${maxRetries})${imageObj ? " [Vision]" : ""}...`, "req");
 
       const response = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
-              parts: [{ text: promptText }]
-            }
-          ],
-          generationConfig: {
-            responseMimeType: "application/json",
-            temperature: 0.1
-          }
-        })
+        body: JSON.stringify(requestBody)
       });
 
       const elapsed = Math.round(performance.now() - startTime);
@@ -1335,7 +1498,11 @@ function runSmartPageExtractor(forceIgnoreSelection = false) {
     formattedTitle: "",
     structuredDates: [],
     sample: "",
-    selection: ""
+    selection: "",
+    isImagePage: false,
+    imageUrl: "",
+    imageBase64: null,
+    imageMimeType: "image/jpeg"
   };
 
   let sel = "";
@@ -1563,6 +1730,71 @@ function runSmartPageExtractor(forceIgnoreSelection = false) {
   }
 
   data.sample = sel.length > 0 ? sel : bodyText;
+
+  // 8. Image Flyer / Poster Detection
+  let isImagePage = false;
+  let imageUrl = "";
+  let imageBase64 = null;
+  let imageMimeType = "image/jpeg";
+
+  if (document.contentType && document.contentType.startsWith("image/")) {
+    isImagePage = true;
+    imageUrl = window.location.href;
+  } else if (document.images && document.images.length === 1 && (!bodyText || bodyText.trim().length < 50)) {
+    isImagePage = true;
+    imageUrl = document.images[0].src || window.location.href;
+  } else if ((!bodyText || bodyText.trim().length < 250) && document.images && document.images.length > 0) {
+    let bestImg = null;
+    let maxArea = 0;
+    for (let i = 0; i < document.images.length; i++) {
+      const im = document.images[i];
+      const area = (im.naturalWidth || im.width || 0) * (im.naturalHeight || im.height || 0);
+      if (area > maxArea && (im.naturalWidth >= 200 || im.width >= 200)) {
+        maxArea = area;
+        bestImg = im;
+      }
+    }
+    if (bestImg) {
+      isImagePage = true;
+      imageUrl = bestImg.src;
+    }
+  }
+
+  if (isImagePage && document.images && document.images.length > 0) {
+    const targetImg = document.querySelector("img");
+    if (targetImg && targetImg.complete && targetImg.naturalWidth > 0) {
+      try {
+        const maxDim = 1600;
+        let w = targetImg.naturalWidth || targetImg.width || 800;
+        let h = targetImg.naturalHeight || targetImg.height || 600;
+        if (w > maxDim || h > maxDim) {
+          if (w > h) {
+            h = Math.round((h * maxDim) / w);
+            w = maxDim;
+          } else {
+            w = Math.round((w * maxDim) / h);
+            h = maxDim;
+          }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(targetImg, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+        imageBase64 = dataUrl.split(",")[1];
+        imageMimeType = "image/jpeg";
+      } catch (e) {
+        // Tainted canvas by CORS, popup fetch will be used as fallback
+      }
+    }
+  }
+
+  data.isImagePage = isImagePage;
+  data.imageUrl = imageUrl || window.location.href;
+  data.imageBase64 = imageBase64;
+  data.imageMimeType = imageMimeType;
+
   return data;
 }
 
