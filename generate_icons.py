@@ -59,7 +59,7 @@ def create_png_data(width, height, color_rgb):
 
 def build_parser():
     parser = argparse.ArgumentParser(
-        description="Generate standard PNG icons for SwissKnife Chrome extension.",
+        description="Generate standard PNG icons for My Extras Chrome extension.",
         epilog="Examples:\n  python generate_icons.py --output-dir ./icons\n  python generate_icons.py --output-dir ./icons --debug\n",
         formatter_class=argparse.RawDescriptionHelpFormatter
     )

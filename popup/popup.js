@@ -108,7 +108,7 @@ async function initStandaloneWindowMode() {
     document.body.classList.add('standalone-window');
     if (popoutText) popoutText.textContent = 'New Tab';
     if (popoutBtn) {
-      popoutBtn.title = 'Open SwissKnife in a browser tab';
+      popoutBtn.title = 'Open My Extras in a browser tab';
       popoutBtn.addEventListener('click', () => {
         chrome.tabs.create({ url: chrome.runtime.getURL('popup/popup.html?mode=window') });
       });
@@ -2390,7 +2390,7 @@ function openGoogleCalendarForEvents(eventList) {
   const sourceUrl = activeTabInfo ? activeTabInfo.url : "";
 
   // Title is clean without any prefix
-  const details = `Extracted via SwissKnife Extension.\nSource: ${sourceUrl}`;
+  const details = `Extracted via My Extras Extension.\nSource: ${sourceUrl}`;
 
   eventList.forEach((evt) => {
     const startIso = formatGoogleCalendarDate(evt.start);

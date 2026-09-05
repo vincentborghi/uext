@@ -1,4 +1,4 @@
-# SwissKnife - Chrome Extension Companion
+# My Extras - Chrome Extension Companion
 
 A lightweight, standalone Chrome Extension (Manifest V3) acting as your web multi-tool companion.
 
@@ -43,4 +43,4 @@ A lightweight, standalone Chrome Extension (Manifest V3) acting as your web mult
 2. Enable **Developer mode** (toggle in the top right corner).
 3. Click on **Load unpacked** (Charger l\'extension non empaquetee).
 4. Select the project folder: the project folder where this repository was cloned (containing manifest.json)
-5. Pin the **SwissKnife** icon to your Chrome toolbar.
+5. Pin the **My Extras** icon to your Chrome toolbar.
