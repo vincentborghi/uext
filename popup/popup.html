@@ -15,7 +15,16 @@
         <img src="../icons/icon32.png" alt="Logo" width="22" height="22">
         <h1 class="h6 mb-0 fw-bold text-primary">SwissKnife</h1>
       </div>
-      <div id="header-status" class="small text-muted"></div>
+      <div class="d-flex align-items-center gap-2">
+        <div class="form-check form-switch mb-0 d-flex align-items-center" title="Always open extension in a standalone window instead of dropdown">
+          <input class="form-check-input me-1" type="checkbox" id="chk-always-window" style="cursor: pointer;">
+          <label class="form-check-label small text-secondary" for="chk-always-window" style="cursor: pointer; font-size: 0.78rem;">Auto-window</label>
+        </div>
+        <button id="btn-popout-window" class="btn btn-sm btn-outline-primary py-0 px-2 d-flex align-items-center gap-1" title="Open SwissKnife in a dedicated standalone window that stays open">
+          <span style="font-size: 0.95rem; line-height: 1;">&#x29C9;</span>
+          <span id="popout-btn-text" class="small">Pop out</span>
+        </button>
+      </div>
     </header>
 
     <!-- Main Navigation Tabs -->
@@ -41,17 +50,27 @@
       <section class="tab-pane fade show active" id="tab-fip" role="tabpanel">
         <div class="card shadow-sm mb-3">
           <div class="card-body p-3">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <span class="badge bg-danger">FIP Radio Live</span>
-              <button id="fip-refresh-btn" class="btn btn-sm btn-outline-secondary py-0 px-2" title="Refresh live song">
-                Refresh
-              </button>
+            <!-- Station Selector Row -->
+            <div class="row g-2 align-items-center mb-3 pb-2 border-bottom">
+              <label class="col-sm-3 col-form-label col-form-label-sm fw-semibold" for="fip-station-select">FIP Station</label>
+              <div class="col-sm-9 d-flex gap-2">
+                <select id="fip-station-select" class="form-select form-select-sm fw-semibold">
+                  <option value="fip" selected>FIP (Direct)</option>
+                  <option value="fip_nouveautes">FIP Nouveautes</option>
+                  <option value="fip_cultes">FIP Culte</option>
+                  <option value="fip_sacre_francais">FIP Sacre Francais</option>
+                  <option value="fip_jazz">FIP Jazz</option>
+                </select>
+                <button id="fip-refresh-btn" class="btn btn-sm btn-outline-secondary py-0 px-2 flex-shrink-0" title="Refresh live song">
+                  Refresh
+                </button>
+              </div>
             </div>
 
             <!-- Track display -->
             <div id="fip-loading" class="text-center py-4 d-none">
               <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
-              <p class="small text-muted mt-2 mb-0">Fetching live track from FIP...</p>
+              <p class="small text-muted mt-2 mb-0" id="fip-loading-text">Fetching live track...</p>
             </div>
 
             <div id="fip-content" class="d-flex gap-3 align-items-start">

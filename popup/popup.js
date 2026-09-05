@@ -1,6 +1,53 @@
-const FIP_API_URL = 'https://api.radiofrance.fr/livemeta/pull/7';
-const FIP_STREAM_URL = 'https://icecast.radiofrance.fr/fip-midfi.mp3';
 const DEFAULT_BNF_PROXY = 'https://acces-distant.bnf.fr/login?url=';
+
+const FIP_STATIONS = {
+  fip: {
+    id: 'fip',
+    name: 'FIP Direct',
+    stationId: 7,
+    streamUrl: 'https://icecast.radiofrance.fr/fip-midfi.mp3',
+    pullId: 7,
+    tag: 'fip'
+  },
+  fip_nouveautes: {
+    id: 'fip_nouveautes',
+    name: 'FIP Nouveautes',
+    stationId: 70,
+    streamUrl: 'https://icecast.radiofrance.fr/fipnouveautes-midfi.mp3',
+    pullId: 70,
+    tag: 'fip-nouveautes'
+  },
+  fip_cultes: {
+    id: 'fip_cultes',
+    name: 'FIP Culte',
+    stationId: 709,
+    streamUrl: 'https://icecast.radiofrance.fr/fipculte-midfi.mp3',
+    pullId: null,
+    tag: 'fip-culte'
+  },
+  fip_sacre_francais: {
+    id: 'fip_sacre_francais',
+    name: 'FIP Sacre Francais',
+    stationId: 96,
+    streamUrl: 'https://icecast.radiofrance.fr/fipsacrefrancais-midfi.mp3',
+    pullId: null,
+    tag: 'fip-sacre-francais'
+  },
+  fip_jazz: {
+    id: 'fip_jazz',
+    name: 'FIP Jazz',
+    stationId: 65,
+    streamUrl: 'https://icecast.radiofrance.fr/fipjazz-midfi.mp3',
+    pullId: 65,
+    tag: 'fip-jazz'
+  }
+};
+
+let currentStationKey = 'fip';
+
+function getActiveStation() {
+  return FIP_STATIONS[currentStationKey] || FIP_STATIONS.fip;
+}
 
 let currentFipTrack = null;
 let activeTabInfo = null;
@@ -8,10 +55,100 @@ let currentLibrary = [];
 let detectedEvents = [];
 let trackModalInstance = null;
 
+async function getTargetTab() {
+  const isStandalone = window.location.search.includes('mode=window') ||
+                       (window.location.protocol === 'chrome-extension:' && (window.outerWidth > 800 || window.outerHeight > 620));
+
+  if (!isStandalone) {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab && tab.url && !tab.url.startsWith('chrome-extension://')) {
+        return tab;
+      }
+    } catch (e) {
+      console.warn('Error querying active tab in current window:', e);
+    }
+  }
+
+  try {
+    const normalWindows = await chrome.windows.getAll({ windowTypes: ['normal'], populate: true });
+    normalWindows.sort((a, b) => (b.focused ? 1 : 0) - (a.focused ? 1 : 0));
+    for (const win of normalWindows) {
+      if (win.tabs && win.tabs.length > 0) {
+        const activeTab = win.tabs.find((t) => t.active && t.url && !t.url.startsWith('chrome-extension://'));
+        if (activeTab) return activeTab;
+      }
+    }
+  } catch (e) {
+    console.warn('Error finding active tab in normal windows:', e);
+  }
+
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    if (tab && tab.url && !tab.url.startsWith('chrome-extension://')) {
+      return tab;
+    }
+  } catch (e) {
+    console.warn('Error querying last focused window tab:', e);
+  }
+
+  return null;
+}
+
+async function initStandaloneWindowMode() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const isWindowMode = urlParams.get('mode') === 'window';
+  const isDetached = isWindowMode || (window.location.protocol === 'chrome-extension:' && (window.outerWidth > 800 || window.outerHeight > 620));
+
+  const popoutBtn = document.getElementById('btn-popout-window');
+  const popoutText = document.getElementById('popout-btn-text');
+  const chkAlwaysWindow = document.getElementById('chk-always-window');
+
+  if (isDetached) {
+    document.body.classList.add('standalone-window');
+    if (popoutText) popoutText.textContent = 'New Tab';
+    if (popoutBtn) {
+      popoutBtn.title = 'Open SwissKnife in a browser tab';
+      popoutBtn.addEventListener('click', () => {
+        chrome.tabs.create({ url: chrome.runtime.getURL('popup/popup.html?mode=window') });
+      });
+    }
+  } else {
+    const settings = await chrome.storage.local.get({ alwaysOpenAsWindow: false });
+    if (settings.alwaysOpenAsWindow) {
+      await openStandaloneWindow();
+      return;
+    }
+
+    if (popoutBtn) {
+      popoutBtn.addEventListener('click', openStandaloneWindow);
+    }
+  }
+
+  if (chkAlwaysWindow) {
+    const settings = await chrome.storage.local.get({ alwaysOpenAsWindow: false });
+    chkAlwaysWindow.checked = Boolean(settings.alwaysOpenAsWindow);
+    chkAlwaysWindow.addEventListener('change', async (e) => {
+      await chrome.storage.local.set({ alwaysOpenAsWindow: e.target.checked });
+    });
+  }
+}
+
+async function openStandaloneWindow() {
+  await chrome.windows.create({
+    url: chrome.runtime.getURL('popup/popup.html?mode=window'),
+    type: 'popup',
+    width: 960,
+    height: 850
+  });
+  window.close();
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
+  await initStandaloneWindowMode();
   setupNavigation();
   setupStarRatingListeners();
-  setupFipModule();
+  await setupFipModule();
   setupLibraryModule();
   setupEventsModule();
   setupBnfModule();
@@ -28,7 +165,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function loadActiveTabInfo() {
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tab = await getTargetTab();
     if (tab) {
       activeTabInfo = tab;
       const bnfUrlEl = document.getElementById("bnf-current-url");
@@ -123,7 +260,7 @@ function updateSelectionBanner(selectionText, isFullPageForce = false) {
 
 async function refreshCalendarExtractionFromTab() {
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tab = await getTargetTab();
     if (!tab || !tab.url || tab.url.startsWith("chrome://") || tab.url.startsWith("edge://")) return;
 
     const results = await chrome.scripting.executeScript({
@@ -229,70 +366,114 @@ function renderStarDisplay(rating) {
   let starsHtml = "";
   for (let i = 1; i <= 5; i++) {
     const activeClass = i <= rating ? "active text-warning" : "text-muted opacity-25";
-    starsHtml += `<span class="${activeClass}">★</span>`;
+    starsHtml += `<span class="${activeClass}">&#9733;</span>`;
   }
   return `<span class="star-rating d-inline-flex gap-0" style="font-size:0.9rem;">${starsHtml}</span>`;
 }
 
 // 1. FIP LIVE MODULE
-function setupFipModule() {
+async function setupFipModule() {
+  const stationSelect = document.getElementById("fip-station-select");
   const refreshBtn = document.getElementById("fip-refresh-btn");
   const saveBtn = document.getElementById("fip-save-library-btn");
   const playBtn = document.getElementById("fip-play-btn");
   const audioEl = document.getElementById("fip-audio-element");
 
-  refreshBtn.addEventListener("click", refreshFipLive);
-
-  saveBtn.addEventListener("click", () => {
-    if (!currentFipTrack) return;
-    const rating = parseInt(document.getElementById("fip-star-rating").getAttribute("data-rating"), 10) || 0;
-    const tagsRaw = document.getElementById("fip-input-tags").value;
-    const notes = document.getElementById("fip-input-notes").value.trim();
-
-    const tags = tagsRaw
-      .split(",")
-      .map((t) => t.trim().toLowerCase())
-      .filter((t) => t.length > 0);
-
-    if (!tags.includes("fip")) {
-      tags.unshift("fip");
+  // Load saved station preference
+  const savedStationRes = await chrome.storage.local.get({ selectedFipStation: "fip" });
+  if (savedStationRes.selectedFipStation && FIP_STATIONS[savedStationRes.selectedFipStation]) {
+    currentStationKey = savedStationRes.selectedFipStation;
+    if (stationSelect) {
+      stationSelect.value = currentStationKey;
     }
+  }
 
-    const trackToSave = {
-      id: "trk_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
-      title: currentFipTrack.title || "Unknown Title",
-      artist: currentFipTrack.artist || "Unknown Artist",
-      album: currentFipTrack.album || "",
-      year: currentFipTrack.year || "",
-      origin: "FIP",
-      tags: tags,
-      rating: rating,
-      notes: notes,
-      coverUrl: currentFipTrack.coverUrl || "",
-      links: currentFipTrack.links || {},
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    };
+  if (stationSelect) {
+    stationSelect.addEventListener("change", async (e) => {
+      currentStationKey = e.target.value;
+      await chrome.storage.local.set({ selectedFipStation: currentStationKey });
+      const station = getActiveStation();
 
-    saveTrackToLibrary(trackToSave);
+      if (audioEl && !audioEl.paused) {
+        audioEl.src = station.streamUrl;
+        audioEl.play().catch((err) => console.warn("Audio stream play error:", err));
+        if (playBtn) {
+          playBtn.textContent = "Pause " + station.name;
+          playBtn.classList.replace("btn-outline-primary", "btn-danger");
+        }
+      } else if (playBtn) {
+        playBtn.textContent = "Play " + station.name;
+      }
 
-    const alertEl = document.getElementById("fip-save-alert");
-    alertEl.classList.remove("d-none");
-    setTimeout(() => alertEl.classList.add("d-none"), 3000);
-  });
+      await refreshFipLive();
+    });
+  }
+
+  if (refreshBtn) {
+    refreshBtn.addEventListener("click", refreshFipLive);
+  }
 
   if (playBtn && audioEl) {
+    const initialStation = getActiveStation();
+    playBtn.textContent = "Play " + initialStation.name;
+
     playBtn.addEventListener("click", () => {
+      const station = getActiveStation();
       if (audioEl.paused) {
-        audioEl.src = FIP_STREAM_URL;
-        audioEl.play();
-        playBtn.textContent = "Pause FIP";
+        audioEl.src = station.streamUrl;
+        audioEl.play().catch((err) => console.warn("Audio play error:", err));
+        playBtn.textContent = "Pause " + station.name;
         playBtn.classList.replace("btn-outline-primary", "btn-danger");
       } else {
         audioEl.pause();
         audioEl.src = "";
-        playBtn.textContent = "Play FIP";
+        playBtn.textContent = "Play " + station.name;
         playBtn.classList.replace("btn-danger", "btn-outline-primary");
+      }
+    });
+  }
+
+  if (saveBtn) {
+    saveBtn.addEventListener("click", () => {
+      if (!currentFipTrack) return;
+      const rating = parseInt(document.getElementById("fip-star-rating").getAttribute("data-rating"), 10) || 0;
+      const tagsRaw = document.getElementById("fip-input-tags").value;
+      const notes = document.getElementById("fip-input-notes").value.trim();
+
+      const tags = tagsRaw
+        .split(",")
+        .map((t) => t.trim().toLowerCase())
+        .filter((t) => t.length > 0);
+
+      if (!tags.includes("fip")) {
+        tags.unshift("fip");
+      }
+      if (currentFipTrack.stationTag && !tags.includes(currentFipTrack.stationTag)) {
+        tags.push(currentFipTrack.stationTag);
+      }
+
+      const trackToSave = {
+        id: "trk_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+        title: currentFipTrack.title || "Unknown Title",
+        artist: currentFipTrack.artist || "Unknown Artist",
+        album: currentFipTrack.album || "",
+        year: currentFipTrack.year || "",
+        origin: currentFipTrack.origin || "FIP",
+        tags: tags,
+        rating: rating,
+        notes: notes,
+        coverUrl: currentFipTrack.coverUrl || "",
+        links: currentFipTrack.links || {},
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+
+      saveTrackToLibrary(trackToSave);
+
+      const alertEl = document.getElementById("fip-save-alert");
+      if (alertEl) {
+        alertEl.classList.remove("d-none");
+        setTimeout(() => alertEl.classList.add("d-none"), 3000);
       }
     });
   }
@@ -300,64 +481,114 @@ function setupFipModule() {
 
 async function refreshFipLive() {
   const loadingEl = document.getElementById("fip-loading");
+  const loadingTextEl = document.getElementById("fip-loading-text");
   const contentEl = document.getElementById("fip-content");
   const titleEl = document.getElementById("fip-title");
   const artistEl = document.getElementById("fip-artist");
   const albumEl = document.getElementById("fip-album");
   const coverEl = document.getElementById("fip-cover");
 
+  const station = getActiveStation();
+  if (loadingTextEl) {
+    loadingTextEl.textContent = "Fetching live track from " + station.name + "...";
+  }
+
   try {
     loadingEl.classList.remove("d-none");
     contentEl.classList.add("opacity-50");
 
-    const response = await fetch(FIP_API_URL + "?ts=" + Date.now());
-    if (!response.ok) {
-      throw new Error("HTTP error " + response.status);
+    let title = "";
+    let artist = "";
+    let album = "";
+    let year = "";
+    let cover = "";
+
+    // 1. Try pullId first if available (provides rich metadata: album, year)
+    if (station.pullId) {
+      try {
+        const pullUrl = "https://api.radiofrance.fr/livemeta/pull/" + station.pullId + "?ts=" + Date.now();
+        const pullResp = await fetch(pullUrl);
+        if (pullResp.ok) {
+          const pullData = await pullResp.json();
+          const nowTs = Math.floor(Date.now() / 1000);
+          const steps = Object.values(pullData.steps || {});
+          const songs = steps.filter((s) => s && (s.embedType === "song" || s.title));
+          let songData = songs.find((s) => s.start <= nowTs && nowTs <= s.end);
+          if (!songData && songs.length > 0) {
+            songs.sort((a, b) => (b.start || 0) - (a.start || 0));
+            songData = songs[0];
+          }
+          if (songData) {
+            title = songData.title || songData.name || "";
+            artist = songData.authors || songData.performers || (songData.highlightedArtists && songData.highlightedArtists[0]) || songData.artist || "";
+            album = songData.titreAlbum || songData.album?.title || songData.album || "";
+            year = songData.anneeEditionMusique || songData.releaseYear || songData.year || "";
+            cover = songData.visual || songData.coverUrl || songData.cover?.src || "";
+          }
+        }
+      } catch (pullErr) {
+        console.warn("Pull fetch failed, falling back to live endpoint:", pullErr);
+      }
     }
 
-    const data = await response.json();
-    const nowTs = Math.floor(Date.now() / 1000);
-    const steps = Object.values(data.steps || {});
-    
-    // Find active song or fallback to latest step
-    const songs = steps.filter((s) => s && (s.embedType === "song" || s.title));
-    let songData = songs.find((s) => s.start <= nowTs && nowTs <= s.end);
-    
-    if (!songData && songs.length > 0) {
-      songs.sort((a, b) => (b.start || 0) - (a.start || 0));
-      songData = songs[0];
+    // 2. If no song from pull, fetch transistor live endpoint
+    if (!title || !artist) {
+      const liveUrl = "https://api.radiofrance.fr/livemeta/live/" + station.stationId + "/transistor_musical_player?ts=" + Date.now();
+      const liveResp = await fetch(liveUrl);
+      if (liveResp.ok) {
+        const liveData = await liveResp.json();
+        const now = liveData.now || {};
+        const secondLine = (now.secondLine || "").trim();
+        if (secondLine.includes(" \u2022 ")) {
+          const parts = secondLine.split(" \u2022 ");
+          artist = parts[0].trim();
+          title = parts.slice(1).join(" \u2022 ").trim();
+        } else if (secondLine.includes(" - ")) {
+          const parts = secondLine.split(" - ");
+          artist = parts[0].trim();
+          title = parts.slice(1).join(" - ").trim();
+        } else if (secondLine) {
+          title = secondLine;
+          artist = now.firstLine || station.name;
+        }
+
+        if (!album && now.firstLine) {
+          album = now.firstLine;
+        }
+
+        if (!cover && now.cover) {
+          cover = "https://www.radiofrance.fr/pikapi/images/" + now.cover + "/400x400";
+        }
+      }
     }
 
-    if (!songData) {
-      songData = data.now?.song || data.levels?.[0]?.items?.[0] || {};
-    }
-
-    const title = songData.title || songData.name || "Unknown Track";
-    const artist = songData.authors || songData.performers || (songData.highlightedArtists && songData.highlightedArtists[0]) || songData.artist || "Unknown Artist";
-    const album = songData.titreAlbum || songData.album?.title || songData.album || "";
-    const year = songData.anneeEditionMusique || songData.releaseYear || songData.year || "";
-    const cover = songData.visual || songData.coverUrl || songData.cover?.src || "../icons/icon48.png";
+    title = title || "Unknown Track";
+    artist = artist || "Unknown Artist";
+    cover = cover || "../icons/icon48.png";
 
     currentFipTrack = {
       title,
       artist,
       album,
       year,
+      origin: station.name,
+      stationTag: station.tag,
       coverUrl: cover,
       links: generateSearchLinks(artist, title)
     };
 
     titleEl.textContent = title;
     artistEl.textContent = artist;
-    albumEl.textContent = [album, year].filter(Boolean).join(" • ") || "Single / Album";
+    albumEl.textContent = [album, year].filter(Boolean).join(" - ") || station.name;
     coverEl.src = cover;
 
     updateSearchLinks("fip-link-", currentFipTrack.links);
   } catch (err) {
     console.warn("Could not fetch FIP live directly:", err);
-    titleEl.textContent = "FIP Radio Direct";
-    artistEl.textContent = "Live Radio France";
+    titleEl.textContent = station.name + " Live";
+    artistEl.textContent = "Radio France";
     albumEl.textContent = "Click refresh or open FIP website";
+    coverEl.src = "../icons/icon48.png";
   } finally {
     loadingEl.classList.add("d-none");
     contentEl.classList.remove("opacity-50");
@@ -1018,8 +1249,8 @@ async function scanCurrentPageWithGeminiAI() {
   listContainer.innerHTML = `<div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> Analyzing page with Google Gemini AI...</div>`;
 
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab) throw new Error("No active tab");
+    const tab = await getTargetTab();
+    if (!tab) throw new Error("No active browser webpage detected. Switch to a webpage tab.");
 
     logAiTrace(`Active Tab: "${(tab.title || "").substring(0, 40)}" (${tab.url || ""})`, "info");
 
@@ -1522,8 +1753,8 @@ async function scanCurrentPageForDates(forceFullPage = false) {
   listContainer.innerHTML = `<div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> Scanning ${scanLabel}...</div>`;
 
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab) throw new Error("No active tab");
+    const tab = await getTargetTab();
+    if (!tab) throw new Error("No active browser webpage detected. Switch to a webpage tab.");
 
     const results = await chrome.scripting.executeScript({
       target: { tabId: tab.id },

@@ -19,11 +19,24 @@ chrome.runtime.onInstalled.addListener(() => {
     title: "Extract dates to Calendar from selection",
     contexts: ["selection"]
   });
+
+  chrome.contextMenus.create({
+    id: "swissknife-open-window",
+    title: "Open in standalone window",
+    contexts: ["action"]
+  });
 });
 
 // Handle context menu clicks
 chrome.contextMenus.onClicked.addListener((info, tab) => {
-  if (info.menuItemId === "swissknife-bnf-open") {
+  if (info.menuItemId === "swissknife-open-window") {
+    chrome.windows.create({
+      url: chrome.runtime.getURL("popup/popup.html?mode=window"),
+      type: "popup",
+      width: 960,
+      height: 850
+    });
+  } else if (info.menuItemId === "swissknife-bnf-open") {
     const targetUrl = info.linkUrl || info.pageUrl || tab?.url;
     if (targetUrl) {
       chrome.storage.local.get({ bnfProxyTemplate: "https://acces-distant.bnf.fr/login?url=" }, (res) => {
