@@ -7,7 +7,8 @@ const FIP_STATIONS = {
     stationId: 7,
     streamUrl: 'https://icecast.radiofrance.fr/fip-midfi.mp3',
     pullId: 7,
-    tag: 'fip'
+    tag: 'fip',
+    webUrl: 'https://www.radiofrance.fr/fip'
   },
   fip_nouveautes: {
     id: 'fip_nouveautes',
@@ -15,7 +16,8 @@ const FIP_STATIONS = {
     stationId: 70,
     streamUrl: 'https://icecast.radiofrance.fr/fipnouveautes-midfi.mp3',
     pullId: 70,
-    tag: 'fip-nouveautes'
+    tag: 'fip-nouveautes',
+    webUrl: 'https://www.radiofrance.fr/fip/radio-nouveautes'
   },
   fip_cultes: {
     id: 'fip_cultes',
@@ -23,7 +25,8 @@ const FIP_STATIONS = {
     stationId: 709,
     streamUrl: 'https://icecast.radiofrance.fr/fipculte-midfi.mp3',
     pullId: null,
-    tag: 'fip-culte'
+    tag: 'fip-culte',
+    webUrl: 'https://www.radiofrance.fr/fip/radio-cultes'
   },
   fip_sacre_francais: {
     id: 'fip_sacre_francais',
@@ -31,7 +34,8 @@ const FIP_STATIONS = {
     stationId: 96,
     streamUrl: 'https://icecast.radiofrance.fr/fipsacrefrancais-midfi.mp3',
     pullId: null,
-    tag: 'fip-sacre-francais'
+    tag: 'fip-sacre-francais',
+    webUrl: 'https://www.radiofrance.fr/fip/radio-sacre-francais'
   },
   fip_jazz: {
     id: 'fip_jazz',
@@ -39,7 +43,8 @@ const FIP_STATIONS = {
     stationId: 65,
     streamUrl: 'https://icecast.radiofrance.fr/fipjazz-midfi.mp3',
     pullId: 65,
-    tag: 'fip-jazz'
+    tag: 'fip-jazz',
+    webUrl: 'https://www.radiofrance.fr/fip/radio-jazz'
   }
 };
 
@@ -388,21 +393,31 @@ async function setupFipModule() {
     }
   }
 
+  const websiteLink = document.getElementById("fip-link-website");
+  const updateWebsiteLink = (st) => {
+    if (websiteLink) {
+      websiteLink.href = (st && st.webUrl) ? st.webUrl : "https://www.radiofrance.fr/fip";
+    }
+  };
+  updateWebsiteLink(getActiveStation());
+
   if (stationSelect) {
     stationSelect.addEventListener("change", async (e) => {
       currentStationKey = e.target.value;
       await chrome.storage.local.set({ selectedFipStation: currentStationKey });
       const station = getActiveStation();
+      updateWebsiteLink(station);
 
       if (audioEl && !audioEl.paused) {
         audioEl.src = station.streamUrl;
         audioEl.play().catch((err) => console.warn("Audio stream play error:", err));
         if (playBtn) {
-          playBtn.textContent = "Pause " + station.name;
+          playBtn.textContent = "Stop";
           playBtn.classList.replace("btn-outline-primary", "btn-danger");
         }
       } else if (playBtn) {
-        playBtn.textContent = "Play " + station.name;
+        playBtn.textContent = "Play";
+        playBtn.classList.replace("btn-danger", "btn-outline-primary");
       }
 
       await refreshFipLive();
@@ -414,20 +429,19 @@ async function setupFipModule() {
   }
 
   if (playBtn && audioEl) {
-    const initialStation = getActiveStation();
-    playBtn.textContent = "Play " + initialStation.name;
+    playBtn.textContent = "Play";
 
     playBtn.addEventListener("click", () => {
       const station = getActiveStation();
       if (audioEl.paused) {
         audioEl.src = station.streamUrl;
-        audioEl.play().catch((err) => console.warn("Audio play error:", err));
-        playBtn.textContent = "Pause " + station.name;
+        audioEl.play().catch((err) => console.warn("Audio stream play error:", err));
+        playBtn.textContent = "Stop";
         playBtn.classList.replace("btn-outline-primary", "btn-danger");
       } else {
         audioEl.pause();
         audioEl.src = "";
-        playBtn.textContent = "Play " + station.name;
+        playBtn.textContent = "Play";
         playBtn.classList.replace("btn-danger", "btn-outline-primary");
       }
     });

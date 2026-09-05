@@ -53,7 +53,7 @@
             <!-- Station Selector Row -->
             <div class="row g-2 align-items-center mb-3 pb-2 border-bottom">
               <label class="col-sm-3 col-form-label col-form-label-sm fw-semibold" for="fip-station-select">FIP Station</label>
-              <div class="col-sm-9 d-flex gap-2">
+              <div class="col-sm-9 d-flex gap-2 align-items-center">
                 <select id="fip-station-select" class="form-select form-select-sm fw-semibold">
                   <option value="fip" selected>FIP (Direct)</option>
                   <option value="fip_nouveautes">FIP Nouveautes</option>
@@ -61,9 +61,13 @@
                   <option value="fip_sacre_francais">FIP Sacre Francais</option>
                   <option value="fip_jazz">FIP Jazz</option>
                 </select>
+                <button id="fip-play-btn" class="btn btn-sm btn-outline-primary py-0 px-3 text-nowrap flex-shrink-0 fw-semibold" title="Play or stop radio stream">
+                  Play
+                </button>
                 <button id="fip-refresh-btn" class="btn btn-sm btn-outline-secondary py-0 px-2 flex-shrink-0" title="Refresh live song">
                   Refresh
                 </button>
+                <audio id="fip-audio-element" preload="none"></audio>
               </div>
             </div>
 
@@ -84,22 +88,12 @@
 
             <!-- Quick external search links -->
             <div class="mt-3 pt-2 border-top d-flex flex-wrap gap-1" id="fip-links-container">
+              <a id="fip-link-website" href="https://www.radiofrance.fr/fip" target="_blank" class="btn btn-sm btn-outline-primary py-0 px-2 small fw-semibold">FIP Web Site</a>
               <a id="fip-link-yt" href="#" target="_blank" class="btn btn-sm btn-outline-danger py-0 px-2 small">YouTube</a>
               <a id="fip-link-discogs" href="#" target="_blank" class="btn btn-sm btn-outline-dark py-0 px-2 small">Discogs</a>
               <a id="fip-link-spotify" href="#" target="_blank" class="btn btn-sm btn-outline-success py-0 px-2 small">Spotify</a>
               <a id="fip-link-wiki" href="#" target="_blank" class="btn btn-sm btn-outline-info py-0 px-2 small">Wikipedia</a>
               <a id="fip-link-bandcamp" href="#" target="_blank" class="btn btn-sm btn-outline-secondary py-0 px-2 small">Bandcamp</a>
-            </div>
-
-            <!-- Audio Player -->
-            <div class="mt-3 pt-2 border-top d-flex align-items-center justify-content-between">
-              <span class="small fw-semibold text-secondary">Audio Stream:</span>
-              <div class="d-flex align-items-center gap-2">
-                <button id="fip-play-btn" class="btn btn-sm btn-outline-primary py-1 px-3">
-                  Play FIP
-                </button>
-                <audio id="fip-audio-element" preload="none"></audio>
-              </div>
             </div>
           </div>
         </div>
