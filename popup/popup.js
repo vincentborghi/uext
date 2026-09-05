@@ -21,7 +21,7 @@ const FIP_STATIONS = {
   },
   fip_cultes: {
     id: 'fip_cultes',
-    name: 'FIP Culte',
+    name: 'FIP Cultes',
     stationId: 709,
     streamUrl: 'https://icecast.radiofrance.fr/fipculte-midfi.mp3',
     pullId: null,
