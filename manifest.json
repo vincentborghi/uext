@@ -15,7 +15,8 @@
     "https://www.radiofrance.fr/*",
     "https://openapi.radiofrance.fr/*",
     "https://icecast.radiofrance.fr/*",
-    "https://acces-distant.bnf.fr/*",
+    "https://*.bnf.fr/*",
+    "https://bnf.idm.oclc.org/*",
     "https://generativelanguage.googleapis.com/*"
   ],
   "action": {

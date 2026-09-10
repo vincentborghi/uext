@@ -27,7 +27,7 @@ A lightweight, standalone Chrome Extension (Manifest V3) acting as your web mult
 * **Direct Google Calendar Creation:** Generates direct event creation links in new tabs without requiring OAuth or Google API credentials setup.
 
 ### 4. BnF Remote Access (Proxy)
-* **1-Click BnF Redirection:** Rewrites active tab URL to route through your Bibliotheque nationale de France (BnF) subscriber proxy (https://acces-distant.bnf.fr/login?url=...).
+* **1-Click BnF Redirection:** Rewrites active tab URL to route through your Bibliotheque nationale de France (BnF) subscriber proxy (https://bnf.idm.oclc.org/login?url=...).
 * **Customizable Proxy Template:** Easily edit the proxy prefix if needed.
 * **Quick Catalog Bookmarks:** Fast links to Gallica, Catalogue General BnF, Cairn.info, Persee, OpenEdition, and JSTOR.
 

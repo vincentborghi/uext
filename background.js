@@ -39,8 +39,13 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   } else if (info.menuItemId === "myextras-bnf-open") {
     const targetUrl = info.linkUrl || info.pageUrl || tab?.url;
     if (targetUrl) {
-      chrome.storage.local.get({ bnfProxyTemplate: "https://acces-distant.bnf.fr/login?url=" }, (res) => {
-        const prefix = res.bnfProxyTemplate || "https://acces-distant.bnf.fr/login?url=";
+      const DEFAULT_PROXY = "https://bnf.idm.oclc.org/login?url=";
+      chrome.storage.local.get({ bnfProxyTemplate: DEFAULT_PROXY }, (res) => {
+        let prefix = res.bnfProxyTemplate || DEFAULT_PROXY;
+        if (prefix.includes("acces-distant.bnf.fr")) {
+          prefix = DEFAULT_PROXY;
+          chrome.storage.local.set({ bnfProxyTemplate: DEFAULT_PROXY });
+        }
         const finalUrl = prefix.includes("%s") 
           ? prefix.replace("%s", encodeURIComponent(targetUrl))
           : prefix + encodeURIComponent(targetUrl);

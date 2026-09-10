@@ -1,4 +1,4 @@
-const DEFAULT_BNF_PROXY = 'https://acces-distant.bnf.fr/login?url=';
+const DEFAULT_BNF_PROXY = 'https://bnf.idm.oclc.org/login?url=';
 
 const FIP_STATIONS = {
   fip: {
@@ -2511,7 +2511,12 @@ function setupBnfModule() {
 
   // Load saved proxy setting & bookmarks
   chrome.storage.local.get({ bnfProxyTemplate: DEFAULT_BNF_PROXY }, (res) => {
-    proxyInput.value = res.bnfProxyTemplate || DEFAULT_BNF_PROXY;
+    let currentProxy = res.bnfProxyTemplate || DEFAULT_BNF_PROXY;
+    if (currentProxy.includes("acces-distant.bnf.fr")) {
+      currentProxy = DEFAULT_BNF_PROXY;
+      chrome.storage.local.set({ bnfProxyTemplate: DEFAULT_BNF_PROXY });
+    }
+    proxyInput.value = currentProxy;
   });
 
   loadAndRenderBnfBookmarks();
