@@ -2596,9 +2596,12 @@ async function loadAndRenderBnfBookmarks() {
   container.innerHTML = "";
 
   bookmarks.forEach((bm, index) => {
+    let isEditing = false;
+    let isHandlePressed = false;
+
     const item = document.createElement("div");
     item.className = "list-group-item d-flex justify-content-between align-items-center py-2 px-2 bnf-bm-item";
-    item.draggable = true;
+    item.draggable = false;
     item.dataset.index = index;
 
     item.innerHTML = `
@@ -2622,6 +2625,26 @@ async function loadAndRenderBnfBookmarks() {
       </div>
     `;
 
+    const dragHandle = item.querySelector(".bm-drag-handle");
+
+    dragHandle.addEventListener("mousedown", () => {
+      if (!isEditing) {
+        isHandlePressed = true;
+        item.draggable = true;
+      }
+    });
+
+    dragHandle.addEventListener("mouseup", () => {
+      isHandlePressed = false;
+    });
+
+    dragHandle.addEventListener("mouseleave", () => {
+      if (draggedBookmarkIndex === null) {
+        isHandlePressed = false;
+        item.draggable = false;
+      }
+    });
+
     // Click to open URL
     item.querySelector(".bm-open-link").addEventListener("click", () => openUrlThroughBnfProxy(bm.url));
     item.querySelector(".bm-open-btn").addEventListener("click", () => openUrlThroughBnfProxy(bm.url));
@@ -2631,9 +2654,12 @@ async function loadAndRenderBnfBookmarks() {
       const titleContainer = item.querySelector(".bm-title-container");
       if (!titleContainer) return;
 
+      isEditing = true;
+      item.draggable = false;
+
       titleContainer.innerHTML = `
         <div class="input-group input-group-sm">
-          <input type="text" class="form-control form-control-sm bm-inline-title-input" value="${escapeHtml(bm.title)}">
+          <input type="text" class="form-control form-control-sm bm-inline-title-input" value="${escapeHtml(bm.title)}" draggable="false">
           <button class="btn btn-sm btn-success py-0 px-2 bm-inline-save-btn" title="Save">OK</button>
           <button class="btn btn-sm btn-outline-secondary py-0 px-2 bm-inline-cancel-btn" title="Cancel">X</button>
         </div>
@@ -2643,10 +2669,21 @@ async function loadAndRenderBnfBookmarks() {
       const saveBtn = titleContainer.querySelector(".bm-inline-save-btn");
       const cancelBtn = titleContainer.querySelector(".bm-inline-cancel-btn");
 
+      // Prevent dragging when selecting text inside the input
+      input.addEventListener("mousedown", (e) => {
+        item.draggable = false;
+        e.stopPropagation();
+      });
+      input.addEventListener("dragstart", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      });
+
       input.focus();
       input.select();
 
       const saveEdit = async () => {
+        isEditing = false;
         const newTitle = input.value.trim();
         if (newTitle && newTitle !== bm.title) {
           bm.title = newTitle;
@@ -2656,7 +2693,10 @@ async function loadAndRenderBnfBookmarks() {
       };
 
       saveBtn.addEventListener("click", saveEdit);
-      cancelBtn.addEventListener("click", () => loadAndRenderBnfBookmarks());
+      cancelBtn.addEventListener("click", () => {
+        isEditing = false;
+        loadAndRenderBnfBookmarks();
+      });
 
       input.addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
@@ -2664,6 +2704,7 @@ async function loadAndRenderBnfBookmarks() {
           saveEdit();
         } else if (e.key === "Escape") {
           e.preventDefault();
+          isEditing = false;
           loadAndRenderBnfBookmarks();
         }
       });
@@ -2681,6 +2722,10 @@ async function loadAndRenderBnfBookmarks() {
 
     // HTML5 Drag and Drop events for reordering
     item.addEventListener("dragstart", (e) => {
+      if (!isHandlePressed || isEditing) {
+        e.preventDefault();
+        return;
+      }
       draggedBookmarkIndex = index;
       item.classList.add("dragging");
       e.dataTransfer.effectAllowed = "move";
@@ -2712,6 +2757,8 @@ async function loadAndRenderBnfBookmarks() {
     item.addEventListener("dragend", () => {
       item.classList.remove("dragging");
       item.classList.remove("drag-over");
+      item.draggable = false;
+      isHandlePressed = false;
       draggedBookmarkIndex = null;
     });
 
