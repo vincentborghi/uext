@@ -502,10 +502,13 @@
               Tenter ouverture page active via Proxy BnF
             </button>
 
-            <label class="form-label small fw-semibold mb-1" for="bnf-proxy-input">Modèle de Proxy (si configuré)</label>
-            <div class="input-group input-group-sm mb-2">
-              <input type="text" id="bnf-proxy-input" class="form-control form-control-sm" value="https://bnf.idm.oclc.org/login?url=">
+            <label class="form-label small fw-semibold mb-1" for="bnf-proxy-input">Modèle de Proxy (si personnalisé)</label>
+            <div class="input-group input-group-sm mb-1">
+              <input type="text" id="bnf-proxy-input" class="form-control form-control-sm" placeholder="Automatique (ex: www-mediapart-fr.bnf.idm.oclc.org)">
               <button id="bnf-save-settings-btn" class="btn btn-outline-secondary">Sauvegarder</button>
+            </div>
+            <div class="form-text text-muted mb-2" style="font-size:0.68rem;">
+              Par défaut, réécriture automatique en sous-domaine EZproxy BnF (ex: <code>www.mediapart.fr</code> &rarr; <code>www-mediapart-fr.bnf.idm.oclc.org</code>). Laissez vide pour le mode automatique.
             </div>
             <span id="bnf-settings-saved" class="small text-success d-none">Modèle enregistré !</span>
           </div>

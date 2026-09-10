@@ -39,16 +39,9 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   } else if (info.menuItemId === "myextras-bnf-open") {
     const targetUrl = info.linkUrl || info.pageUrl || tab?.url;
     if (targetUrl) {
-      const DEFAULT_PROXY = "https://bnf.idm.oclc.org/login?url=";
-      chrome.storage.local.get({ bnfProxyTemplate: DEFAULT_PROXY }, (res) => {
-        let prefix = res.bnfProxyTemplate || DEFAULT_PROXY;
-        if (prefix.includes("acces-distant.bnf.fr")) {
-          prefix = DEFAULT_PROXY;
-          chrome.storage.local.set({ bnfProxyTemplate: DEFAULT_PROXY });
-        }
-        const finalUrl = prefix.includes("%s") 
-          ? prefix.replace("%s", encodeURIComponent(targetUrl))
-          : prefix + encodeURIComponent(targetUrl);
+      chrome.storage.local.get({ bnfProxyTemplate: "" }, (res) => {
+        const customTemplate = res.bnfProxyTemplate || "";
+        const finalUrl = rewriteUrlToBnfProxy(targetUrl, customTemplate);
         chrome.tabs.create({ url: finalUrl });
       });
     }
@@ -99,3 +92,33 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     }
   }
 });
+
+function rewriteUrlToBnfProxy(rawUrl, customTemplate = "") {
+  if (!rawUrl) return "";
+
+  // If user configured a custom template with %s
+  if (customTemplate && customTemplate.includes("%s")) {
+    return customTemplate.replace("%s", encodeURIComponent(rawUrl));
+  }
+  // If user explicitly configured a prefix ending in '='
+  if (customTemplate && customTemplate.endsWith("=")) {
+    return customTemplate + encodeURIComponent(rawUrl);
+  }
+
+  // If already proxied by BnF EZProxy, keep it
+  if (rawUrl.includes(".bnf.idm.oclc.org") || rawUrl.includes("bnf.fr")) {
+    return rawUrl;
+  }
+
+  try {
+    const parsed = new URL(rawUrl);
+    // OCLC EZproxy subdomain rewrite: replace all dots in hostname with hyphens
+    // e.g. www.mediapart.fr -> www-mediapart-fr.bnf.idm.oclc.org
+    const hostWithDashes = parsed.hostname.replace(/\./g, "-");
+    const proxiedHost = `${hostWithDashes}.bnf.idm.oclc.org`;
+    const portPart = (parsed.port && parsed.port !== "80" && parsed.port !== "443") ? `:${parsed.port}` : "";
+    return `https://${proxiedHost}${portPart}${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch (e) {
+    return `https://login.bnf.idm.oclc.org/login?qurl=${encodeURIComponent(rawUrl)}`;
+  }
+}

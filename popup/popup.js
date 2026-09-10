@@ -1,4 +1,4 @@
-const DEFAULT_BNF_PROXY = 'https://bnf.idm.oclc.org/login?url=';
+const DEFAULT_BNF_PROXY = '';
 
 const FIP_STATIONS = {
   fip: {
@@ -2510,11 +2510,12 @@ function setupBnfModule() {
   }
 
   // Load saved proxy setting & bookmarks
-  chrome.storage.local.get({ bnfProxyTemplate: DEFAULT_BNF_PROXY }, (res) => {
-    let currentProxy = res.bnfProxyTemplate || DEFAULT_BNF_PROXY;
-    if (currentProxy.includes("acces-distant.bnf.fr")) {
-      currentProxy = DEFAULT_BNF_PROXY;
-      chrome.storage.local.set({ bnfProxyTemplate: DEFAULT_BNF_PROXY });
+  chrome.storage.local.get({ bnfProxyTemplate: "" }, (res) => {
+    let currentProxy = res.bnfProxyTemplate || "";
+    // Clean legacy obsolete prefixes
+    if (currentProxy.includes("acces-distant.bnf.fr") || currentProxy.includes("bnf.idm.oclc.org/login?url=")) {
+      currentProxy = "";
+      chrome.storage.local.set({ bnfProxyTemplate: "" });
     }
     proxyInput.value = currentProxy;
   });
@@ -2522,7 +2523,7 @@ function setupBnfModule() {
   loadAndRenderBnfBookmarks();
 
   saveSettingsBtn.addEventListener("click", () => {
-    const val = proxyInput.value.trim() || DEFAULT_BNF_PROXY;
+    const val = proxyInput.value.trim();
     chrome.storage.local.set({ bnfProxyTemplate: val }, () => {
       savedMsg.classList.remove("d-none");
       setTimeout(() => savedMsg.classList.add("d-none"), 2000);
@@ -2540,12 +2541,39 @@ function setupBnfModule() {
 
 async function openUrlThroughBnfProxy(targetUrl) {
   const proxyInput = document.getElementById("bnf-proxy-input");
-  const template = (proxyInput ? proxyInput.value.trim() : "") || DEFAULT_BNF_PROXY;
-  const finalUrl = template.includes("%s")
-    ? template.replace("%s", encodeURIComponent(targetUrl))
-    : template + encodeURIComponent(targetUrl);
-
+  const customTemplate = (proxyInput ? proxyInput.value.trim() : "");
+  const finalUrl = rewriteUrlToBnfProxy(targetUrl, customTemplate);
   chrome.tabs.create({ url: finalUrl });
+}
+
+function rewriteUrlToBnfProxy(rawUrl, customTemplate = "") {
+  if (!rawUrl) return "";
+
+  // If user configured a custom template with %s
+  if (customTemplate && customTemplate.includes("%s")) {
+    return customTemplate.replace("%s", encodeURIComponent(rawUrl));
+  }
+  // If user explicitly configured a prefix ending in '='
+  if (customTemplate && customTemplate.endsWith("=")) {
+    return customTemplate + encodeURIComponent(rawUrl);
+  }
+
+  // If already proxied by BnF EZProxy, keep it
+  if (rawUrl.includes(".bnf.idm.oclc.org") || rawUrl.includes("bnf.fr")) {
+    return rawUrl;
+  }
+
+  try {
+    const parsed = new URL(rawUrl);
+    // OCLC EZproxy subdomain rewrite: replace all dots in hostname with hyphens
+    // e.g. www.mediapart.fr -> www-mediapart-fr.bnf.idm.oclc.org
+    const hostWithDashes = parsed.hostname.replace(/\./g, "-");
+    const proxiedHost = `${hostWithDashes}.bnf.idm.oclc.org`;
+    const portPart = (parsed.port && parsed.port !== "80" && parsed.port !== "443") ? `:${parsed.port}` : "";
+    return `https://${proxiedHost}${portPart}${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch (e) {
+    return `https://login.bnf.idm.oclc.org/login?qurl=${encodeURIComponent(rawUrl)}`;
+  }
 }
 
 async function loadAndRenderBnfBookmarks() {
