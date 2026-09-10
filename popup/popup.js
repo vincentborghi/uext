@@ -2578,13 +2578,44 @@ function rewriteUrlToBnfProxy(rawUrl, customTemplate = "") {
 
 let draggedBookmarkIndex = null;
 
+const DEFAULT_BNF_BOOKMARKS = [
+  {
+    id: "bnf_bm_1",
+    title: "Alternatives \u00e9conomiques",
+    url: "https://www-alternatives-economiques-fr.bnf.idm.oclc.org/"
+  },
+  {
+    id: "bnf_bm_2",
+    title: "Arr\u00eat sur images",
+    url: "https://www-arretsurimages-net.bnf.idm.oclc.org/"
+  },
+  {
+    id: "bnf_bm_3",
+    title: "Mediapart",
+    url: "https://www-mediapart-fr.bnf.idm.oclc.org/"
+  },
+  {
+    id: "bnf_bm_4",
+    title: "Nature",
+    url: "https://www-nature-com.bnf.idm.oclc.org/"
+  }
+];
+
 async function loadAndRenderBnfBookmarks() {
   const container = document.getElementById("bnf-custom-bookmarks-list");
   const emptyMsg = document.getElementById("bnf-custom-bookmarks-empty");
   if (!container) return;
 
-  const res = await chrome.storage.local.get({ bnfBookmarks: [] });
-  const bookmarks = res.bnfBookmarks || [];
+  const res = await chrome.storage.local.get({ bnfBookmarksInitialized: false, bnfBookmarks: [] });
+  let bookmarks = res.bnfBookmarks || [];
+
+  if (!res.bnfBookmarksInitialized && bookmarks.length === 0) {
+    bookmarks = [...DEFAULT_BNF_BOOKMARKS];
+    await chrome.storage.local.set({
+      bnfBookmarks: bookmarks,
+      bnfBookmarksInitialized: true
+    });
+  }
 
   if (bookmarks.length === 0) {
     container.innerHTML = "";
@@ -2600,7 +2631,7 @@ async function loadAndRenderBnfBookmarks() {
     let isHandlePressed = false;
 
     const item = document.createElement("div");
-    item.className = "list-group-item d-flex justify-content-between align-items-center py-2 px-2 bnf-bm-item";
+    item.className = "list-group-item d-flex justify-content-between align-items-center py-1 px-2 bnf-bm-item";
     item.draggable = false;
     item.dataset.index = index;
 
@@ -2608,18 +2639,18 @@ async function loadAndRenderBnfBookmarks() {
       <div class="d-flex align-items-center flex-grow-1 min-w-0 me-2">
         <span class="bm-drag-handle me-2" title="Drag to reorder">&#9776;</span>
         <div class="min-w-0 flex-grow-1 bm-title-container">
-          <div class="fw-semibold text-dark text-truncate cursor-pointer bm-open-link" title="Open ${escapeHtml(bm.url)} via BnF">${escapeHtml(bm.title)}</div>
-          <div class="text-muted text-truncate font-monospace" style="font-size:0.68rem;">${escapeHtml(bm.url)}</div>
+          <div class="fw-semibold text-dark text-truncate cursor-pointer bm-open-link" title="Open ${escapeHtml(bm.url)} via BnF" style="line-height: 1.25;">${escapeHtml(bm.title)}</div>
+          <div class="text-muted text-truncate font-monospace" style="font-size:0.65rem; line-height: 1.1;">${escapeHtml(bm.url)}</div>
         </div>
       </div>
       <div class="d-flex gap-1 align-items-center flex-shrink-0">
-        <button class="btn btn-sm btn-outline-primary py-0 px-2 bm-open-btn" title="Open via BnF" style="font-size:0.75rem;">
+        <button class="btn btn-sm btn-outline-primary py-0 px-2 bm-open-btn" title="Open via BnF" style="font-size:0.72rem; line-height: 1.3;">
           Open
         </button>
-        <button class="btn btn-sm btn-outline-secondary py-0 px-2 bm-edit-btn" title="Edit title" style="font-size:0.75rem;">
+        <button class="btn btn-sm btn-outline-secondary py-0 px-2 bm-edit-btn" title="Edit title" style="font-size:0.72rem; line-height: 1.3;">
           Edit
         </button>
-        <button class="btn btn-sm btn-outline-danger py-0 px-2 bm-del-btn" title="Delete bookmark" style="font-size:0.75rem;">
+        <button class="btn btn-sm btn-outline-danger py-0 px-2 bm-del-btn" title="Delete bookmark" style="font-size:0.72rem; line-height: 1.3;">
           Del
         </button>
       </div>
@@ -2659,9 +2690,9 @@ async function loadAndRenderBnfBookmarks() {
 
       titleContainer.innerHTML = `
         <div class="input-group input-group-sm">
-          <input type="text" class="form-control form-control-sm bm-inline-title-input" value="${escapeHtml(bm.title)}" draggable="false">
-          <button class="btn btn-sm btn-success py-0 px-2 bm-inline-save-btn" title="Save">OK</button>
-          <button class="btn btn-sm btn-outline-secondary py-0 px-2 bm-inline-cancel-btn" title="Cancel">X</button>
+          <input type="text" class="form-control form-control-sm bm-inline-title-input py-0" style="font-size:0.78rem; height: 24px;" value="${escapeHtml(bm.title)}" draggable="false">
+          <button class="btn btn-sm btn-success py-0 px-2 bm-inline-save-btn" style="font-size:0.72rem; height: 24px;" title="Save">OK</button>
+          <button class="btn btn-sm btn-outline-secondary py-0 px-2 bm-inline-cancel-btn" style="font-size:0.72rem; height: 24px;" title="Cancel">X</button>
         </div>
       `;
 

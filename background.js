@@ -1,6 +1,39 @@
 // Background service worker for My Extras Extension
 
+const DEFAULT_BNF_BOOKMARKS = [
+  {
+    id: "bnf_bm_1",
+    title: "Alternatives \u00e9conomiques",
+    url: "https://www-alternatives-economiques-fr.bnf.idm.oclc.org/"
+  },
+  {
+    id: "bnf_bm_2",
+    title: "Arr\u00eat sur images",
+    url: "https://www-arretsurimages-net.bnf.idm.oclc.org/"
+  },
+  {
+    id: "bnf_bm_3",
+    title: "Mediapart",
+    url: "https://www-mediapart-fr.bnf.idm.oclc.org/"
+  },
+  {
+    id: "bnf_bm_4",
+    title: "Nature",
+    url: "https://www-nature-com.bnf.idm.oclc.org/"
+  }
+];
+
 chrome.runtime.onInstalled.addListener(() => {
+  // Initialize default BnF bookmarks if not already set
+  chrome.storage.local.get({ bnfBookmarksInitialized: false, bnfBookmarks: [] }, (res) => {
+    if (!res.bnfBookmarksInitialized && (!res.bnfBookmarks || res.bnfBookmarks.length === 0)) {
+      chrome.storage.local.set({
+        bnfBookmarks: DEFAULT_BNF_BOOKMARKS,
+        bnfBookmarksInitialized: true
+      });
+    }
+  });
+
   // Create context menu items
   chrome.contextMenus.create({
     id: "myextras-bnf-open",
