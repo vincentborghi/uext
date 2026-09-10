@@ -129,3 +129,31 @@ body.standalone-window .app-container {
 .cursor-pointer {
   cursor: pointer;
 }
+
+/* BnF Custom Bookmarks: Drag and drop & Edit */
+.bm-drag-handle {
+  cursor: grab;
+  user-select: none;
+  font-size: 0.95rem;
+  line-height: 1;
+  color: #94a3b8;
+  padding: 0 4px;
+}
+
+.bm-drag-handle:active {
+  cursor: grabbing;
+}
+
+.bnf-bm-item {
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.bnf-bm-item.dragging {
+  opacity: 0.45;
+  background-color: #f8fafc;
+}
+
+.bnf-bm-item.drag-over {
+  border-top: 2px solid var(--primary-color) !important;
+  background-color: #eff6ff;
+}

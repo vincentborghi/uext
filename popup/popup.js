@@ -2576,6 +2576,8 @@ function rewriteUrlToBnfProxy(rawUrl, customTemplate = "") {
   }
 }
 
+let draggedBookmarkIndex = null;
+
 async function loadAndRenderBnfBookmarks() {
   const container = document.getElementById("bnf-custom-bookmarks-list");
   const emptyMsg = document.getElementById("bnf-custom-bookmarks-empty");
@@ -2593,18 +2595,26 @@ async function loadAndRenderBnfBookmarks() {
   if (emptyMsg) emptyMsg.classList.add("d-none");
   container.innerHTML = "";
 
-  bookmarks.forEach((bm) => {
+  bookmarks.forEach((bm, index) => {
     const item = document.createElement("div");
-    item.className = "list-group-item d-flex justify-content-between align-items-center py-2 px-2";
+    item.className = "list-group-item d-flex justify-content-between align-items-center py-2 px-2 bnf-bm-item";
+    item.draggable = true;
+    item.dataset.index = index;
 
     item.innerHTML = `
-      <div class="min-w-0 flex-grow-1 me-2 cursor-pointer bm-open-link" title="Open ${escapeHtml(bm.url)} via BnF">
-        <div class="fw-semibold text-dark text-truncate">${escapeHtml(bm.title)}</div>
-        <div class="text-muted text-truncate font-monospace" style="font-size:0.68rem;">${escapeHtml(bm.url)}</div>
+      <div class="d-flex align-items-center flex-grow-1 min-w-0 me-2">
+        <span class="bm-drag-handle me-2" title="Drag to reorder">&#9776;</span>
+        <div class="min-w-0 flex-grow-1 bm-title-container">
+          <div class="fw-semibold text-dark text-truncate cursor-pointer bm-open-link" title="Open ${escapeHtml(bm.url)} via BnF">${escapeHtml(bm.title)}</div>
+          <div class="text-muted text-truncate font-monospace" style="font-size:0.68rem;">${escapeHtml(bm.url)}</div>
+        </div>
       </div>
       <div class="d-flex gap-1 align-items-center flex-shrink-0">
         <button class="btn btn-sm btn-outline-primary py-0 px-2 bm-open-btn" title="Open via BnF" style="font-size:0.75rem;">
           Open
+        </button>
+        <button class="btn btn-sm btn-outline-secondary py-0 px-2 bm-edit-btn" title="Edit title" style="font-size:0.75rem;">
+          Edit
         </button>
         <button class="btn btn-sm btn-outline-danger py-0 px-2 bm-del-btn" title="Delete bookmark" style="font-size:0.75rem;">
           Del
@@ -2612,8 +2622,54 @@ async function loadAndRenderBnfBookmarks() {
       </div>
     `;
 
+    // Click to open URL
     item.querySelector(".bm-open-link").addEventListener("click", () => openUrlThroughBnfProxy(bm.url));
     item.querySelector(".bm-open-btn").addEventListener("click", () => openUrlThroughBnfProxy(bm.url));
+
+    // Inline edit bookmark title
+    item.querySelector(".bm-edit-btn").addEventListener("click", () => {
+      const titleContainer = item.querySelector(".bm-title-container");
+      if (!titleContainer) return;
+
+      titleContainer.innerHTML = `
+        <div class="input-group input-group-sm">
+          <input type="text" class="form-control form-control-sm bm-inline-title-input" value="${escapeHtml(bm.title)}">
+          <button class="btn btn-sm btn-success py-0 px-2 bm-inline-save-btn" title="Save">OK</button>
+          <button class="btn btn-sm btn-outline-secondary py-0 px-2 bm-inline-cancel-btn" title="Cancel">X</button>
+        </div>
+      `;
+
+      const input = titleContainer.querySelector(".bm-inline-title-input");
+      const saveBtn = titleContainer.querySelector(".bm-inline-save-btn");
+      const cancelBtn = titleContainer.querySelector(".bm-inline-cancel-btn");
+
+      input.focus();
+      input.select();
+
+      const saveEdit = async () => {
+        const newTitle = input.value.trim();
+        if (newTitle && newTitle !== bm.title) {
+          bm.title = newTitle;
+          await chrome.storage.local.set({ bnfBookmarks: bookmarks });
+        }
+        loadAndRenderBnfBookmarks();
+      };
+
+      saveBtn.addEventListener("click", saveEdit);
+      cancelBtn.addEventListener("click", () => loadAndRenderBnfBookmarks());
+
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          saveEdit();
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          loadAndRenderBnfBookmarks();
+        }
+      });
+    });
+
+    // Delete bookmark
     item.querySelector(".bm-del-btn").addEventListener("click", async () => {
       if (confirm(`Remove bookmark "${bm.title}"?`)) {
         const current = await chrome.storage.local.get({ bnfBookmarks: [] });
@@ -2621,6 +2677,42 @@ async function loadAndRenderBnfBookmarks() {
         await chrome.storage.local.set({ bnfBookmarks: updated });
         loadAndRenderBnfBookmarks();
       }
+    });
+
+    // HTML5 Drag and Drop events for reordering
+    item.addEventListener("dragstart", (e) => {
+      draggedBookmarkIndex = index;
+      item.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", index.toString());
+    });
+
+    item.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      item.classList.add("drag-over");
+    });
+
+    item.addEventListener("dragleave", () => {
+      item.classList.remove("drag-over");
+    });
+
+    item.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      item.classList.remove("drag-over");
+      const targetIndex = index;
+      if (draggedBookmarkIndex !== null && draggedBookmarkIndex !== targetIndex) {
+        const [movedItem] = bookmarks.splice(draggedBookmarkIndex, 1);
+        bookmarks.splice(targetIndex, 0, movedItem);
+        await chrome.storage.local.set({ bnfBookmarks: bookmarks });
+        loadAndRenderBnfBookmarks();
+      }
+    });
+
+    item.addEventListener("dragend", () => {
+      item.classList.remove("dragging");
+      item.classList.remove("drag-over");
+      draggedBookmarkIndex = null;
     });
 
     container.appendChild(item);

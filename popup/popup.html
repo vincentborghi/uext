@@ -414,6 +414,39 @@
           </div>
         </div>
 
+        <!-- Custom User Bookmarks -->
+        <div class="card shadow-sm mb-3">
+          <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+            <h3 class="h6 mb-0 fw-semibold">Mes Favoris BnF Personnalisés</h3>
+            <button class="btn btn-sm btn-outline-primary py-0 px-2" id="bnf-add-bookmark-toggle">
+              + Ajouter
+            </button>
+          </div>
+          <div class="card-body p-2">
+            <!-- Add Bookmark Form -->
+            <div id="bnf-add-bookmark-form" class="p-2 border rounded bg-light mb-2 d-none">
+              <div class="mb-2">
+                <input type="text" id="bnf-bm-title-input" class="form-control form-control-sm" placeholder="Titre du favori (ex: Cairn Histoire, Revue X...)">
+              </div>
+              <div class="mb-2">
+                <input type="url" id="bnf-bm-url-input" class="form-control form-control-sm" placeholder="URL (ex: https://www.cairn.info/revue-...)">
+              </div>
+              <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-primary py-1 px-2" id="bnf-bm-save-btn">Enregistrer</button>
+                <button class="btn btn-sm btn-secondary py-1 px-2" id="bnf-bm-cancel-btn">Annuler</button>
+              </div>
+            </div>
+
+            <!-- Bookmark Items List -->
+            <div id="bnf-custom-bookmarks-list" class="list-group list-group-flush small">
+              <!-- Dynamically loaded -->
+            </div>
+            <div id="bnf-custom-bookmarks-empty" class="text-center text-muted small py-2 d-none">
+              Aucun favori personnalisé enregistré pour le moment.
+            </div>
+          </div>
+        </div>
+
         <!-- Academic Reviews & Portals -->
         <div class="card shadow-sm mb-3">
           <div class="card-header bg-white py-2">
@@ -451,39 +484,6 @@
                   Gallica Presse
                 </a>
               </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Custom User Bookmarks -->
-        <div class="card shadow-sm mb-3">
-          <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
-            <h3 class="h6 mb-0 fw-semibold">Mes Favoris BnF Personnalisés</h3>
-            <button class="btn btn-sm btn-outline-primary py-0 px-2" id="bnf-add-bookmark-toggle">
-              + Ajouter
-            </button>
-          </div>
-          <div class="card-body p-2">
-            <!-- Add Bookmark Form -->
-            <div id="bnf-add-bookmark-form" class="p-2 border rounded bg-light mb-2 d-none">
-              <div class="mb-2">
-                <input type="text" id="bnf-bm-title-input" class="form-control form-control-sm" placeholder="Titre du favori (ex: Cairn Histoire, Revue X...)">
-              </div>
-              <div class="mb-2">
-                <input type="url" id="bnf-bm-url-input" class="form-control form-control-sm" placeholder="URL (ex: https://www.cairn.info/revue-...)">
-              </div>
-              <div class="d-flex gap-2">
-                <button class="btn btn-sm btn-primary py-1 px-2" id="bnf-bm-save-btn">Enregistrer</button>
-                <button class="btn btn-sm btn-secondary py-1 px-2" id="bnf-bm-cancel-btn">Annuler</button>
-              </div>
-            </div>
-
-            <!-- Bookmark Items List -->
-            <div id="bnf-custom-bookmarks-list" class="list-group list-group-flush small">
-              <!-- Dynamically loaded -->
-            </div>
-            <div id="bnf-custom-bookmarks-empty" class="text-center text-muted small py-2 d-none">
-              Aucun favori personnalisé enregistré pour le moment.
             </div>
           </div>
         </div>
