@@ -2101,6 +2101,124 @@ function runSmartPageExtractor(forceIgnoreSelection = false) {
     }
   }
 
+  // 9. Scan DOM for date elements with typographic and hierarchy weights
+  const domDateCandidates = [];
+  const dateScanRegex = /(?:(?:du\s+)?\d{1,2}\s+(?:au\s+\d{1,2}\s+)?[a-zA-Z\u00C0-\u017F]+(?:\s+\d{4})?|\b\d{1,2}[\/\.-]\d{1,2}(?:[\/\.-]\d{2,4})?|\b\d{4}[-\/]\d{1,2}[-\/]\d{1,2})/i;
+  const h1El = document.querySelector("h1");
+  const mainHeaderEl = document.querySelector("header, [class*='header'], [class*='hero'], [class*='banner'], [class*='cover']");
+
+  try {
+    const walker = document.createTreeWalker(
+      document.body,
+      NodeFilter.SHOW_TEXT,
+      {
+        acceptNode: (node) => {
+          const parent = node.parentElement;
+          if (!parent) return NodeFilter.FILTER_REJECT;
+          const tag = parent.tagName.toLowerCase();
+          if (tag === "script" || tag === "style" || tag === "noscript" || tag === "svg") {
+            return NodeFilter.FILTER_REJECT;
+          }
+          const text = node.nodeValue;
+          if (!text || text.length < 3 || !dateScanRegex.test(text)) {
+            return NodeFilter.FILTER_SKIP;
+          }
+          return NodeFilter.FILTER_ACCEPT;
+        }
+      }
+    );
+
+    let n;
+    let nodeCount = 0;
+    while ((n = walker.nextNode()) && nodeCount < 250) {
+      nodeCount++;
+      const parent = n.parentElement;
+      const rawVal = n.nodeValue.trim();
+      const style = window.getComputedStyle(parent);
+      const fontSize = parseFloat(style.fontSize) || 16;
+      const fontWeight = style.fontWeight || "normal";
+      const tag = parent.tagName.toLowerCase();
+
+      let weight = 50;
+
+      // Font size weight: larger font = higher importance
+      if (fontSize >= 28) {
+        weight += 60;
+      } else if (fontSize >= 22) {
+        weight += 45;
+      } else if (fontSize >= 18) {
+        weight += 30;
+      } else if (fontSize >= 15) {
+        weight += 10;
+      } else if (fontSize < 13) {
+        weight -= 30; // Small footer or fine print notes
+      }
+
+      // Boldness weight: bold / 700+ = higher importance
+      const isBoldTag = tag === "strong" || tag === "b" || parent.closest("strong, b") !== null;
+      const isBoldWeight = fontWeight === "bold" || fontWeight === "bolder" || parseInt(fontWeight, 10) >= 700;
+      if (isBoldTag || isBoldWeight) {
+        weight += 35;
+      } else if (parseInt(fontWeight, 10) >= 600) {
+        weight += 20;
+      } else if (parseInt(fontWeight, 10) >= 500) {
+        weight += 10;
+      }
+
+      // Heading proximity and hierarchy
+      if (tag === "h1" || parent.closest("h1")) {
+        weight += 70;
+      } else if (tag === "h2" || parent.closest("h2")) {
+        weight += 50;
+      } else if (tag === "h3" || parent.closest("h3")) {
+        weight += 35;
+      } else if (tag === "h4" || parent.closest("h4")) {
+        weight += 20;
+      }
+
+      // Close to main h1 or within top header/hero section
+      if (h1El) {
+        if (h1El.contains(parent)) {
+          weight += 40;
+        } else if (h1El.parentElement && h1El.parentElement.contains(parent)) {
+          weight += 30;
+        }
+      }
+      if (mainHeaderEl && mainHeaderEl.contains(parent)) {
+        weight += 25;
+      }
+
+      // Semantic date tag or class
+      if (tag === "time" || parent.closest("time") || parent.hasAttribute("datetime")) {
+        weight += 35;
+      }
+      const classAndId = (parent.className + " " + parent.id + " " + (parent.parentElement ? parent.parentElement.className + " " + parent.parentElement.id : "")).toLowerCase();
+      if (/(?:event-?date|date-?event|horaire|when|schedule|calendar|agenda|seance|representation)/i.test(classAndId)) {
+        weight += 30;
+      }
+
+      // Penalties: footer, copyright, comments, sidebars
+      if (parent.closest("footer, [class*='footer'], [id*='footer'], aside, [class*='sidebar'], nav, [class*='nav'], [class*='comment'], [class*='copyright']")) {
+        weight -= 70;
+      }
+
+      const snippet = (parent.innerText || rawVal).substring(0, 150);
+      if (/(?:publi[eé]|mis [aà] jour|r[eé]dig[eé]|paru|copyright|©|\(c\)|cr[eé][eé] le)/i.test(snippet)) {
+        weight -= 60;
+      }
+
+      domDateCandidates.push({
+        text: rawVal,
+        snippet: snippet,
+        weight: weight,
+        fontSize: Math.round(fontSize),
+        isBold: isBoldTag || isBoldWeight,
+        tag: tag
+      });
+    }
+  } catch (e) {}
+
+  data.domDateCandidates = domDateCandidates;
   data.isImagePage = isImagePage;
   data.imageUrl = imageUrl || window.location.href;
   data.imageBase64 = imageBase64;
@@ -2154,6 +2272,58 @@ function resolveUpcomingEventDate(rawStartDate, rawEndDate) {
   return { start, end };
 }
 
+function findBestDomCandidate(rawMatchText, day, rawMonth, domCandidates) {
+  if (!domCandidates || domCandidates.length === 0) return null;
+  const cleanMatch = (rawMatchText || "").trim().toLowerCase();
+  const dayStr = String(day);
+
+  let best = null;
+  for (let i = 0; i < domCandidates.length; i++) {
+    const cand = domCandidates[i];
+    const cText = (cand.text || "").toLowerCase();
+    const cSnippet = (cand.snippet || "").toLowerCase();
+
+    let matches = false;
+    if (cleanMatch && (cText.includes(cleanMatch) || cleanMatch.includes(cText) || cSnippet.includes(cleanMatch))) {
+      matches = true;
+    } else if (cText.includes(dayStr) && rawMonth && cText.includes(rawMonth.toLowerCase())) {
+      matches = true;
+    }
+
+    if (matches) {
+      if (!best || cand.weight > best.weight) {
+        best = cand;
+      }
+    }
+  }
+  return best;
+}
+
+function calculateEventWeight(rawMatchText, day, rawMonth, domCandidates, hasSelection, hasExplicitHour) {
+  const candidate = findBestDomCandidate(rawMatchText, day, rawMonth, domCandidates);
+  let weight = 50;
+  let typography = null;
+
+  if (candidate) {
+    weight = candidate.weight;
+    typography = {
+      fontSize: candidate.fontSize,
+      isBold: candidate.isBold,
+      tag: candidate.tag
+    };
+  }
+
+  if (hasExplicitHour) {
+    weight += 15;
+  }
+
+  if (hasSelection) {
+    weight += 100;
+  }
+
+  return { weight, typography };
+}
+
 function extractDatesFromMetadata(pageData) {
   const currentYear = new Date().getFullYear();
   const events = [];
@@ -2188,7 +2358,9 @@ function extractDatesFromMetadata(pageData) {
             label: label,
             start: start,
             end: end,
-            raw: sd.start
+            raw: sd.start,
+            weight: hasSelection ? 250 : 220,
+            typography: { tag: "schema.org", isBold: true, fontSize: 16 }
           });
         }
       } catch (e) {}
@@ -2220,6 +2392,7 @@ function extractDatesFromMetadata(pageData) {
 
       let hour = match[5] ? parseInt(match[5], 10) : null;
       let minute = match[6] ? parseInt(match[6], 10) : 0;
+      const hasExplicitHour = (match[5] !== undefined);
 
       if (hour === null) {
         const lookahead = text.substring(match.index + match[0].length, match.index + match[0].length + 30);
@@ -2240,15 +2413,23 @@ function extractDatesFromMetadata(pageData) {
         endDate = new Date(rawYear, monthNum - 1, startDay, hour + 2, minute);
       }
 
+      const scoreData = calculateEventWeight(match[0], startDay, rawMonth, pageData.domDateCandidates, hasSelection, hasExplicitHour);
       const label = match[0].trim();
-      if (!events.some((e) => e.start.getTime() === startDate.getTime())) {
+      const existing = events.find((e) => e.start.getTime() === startDate.getTime());
+      if (!existing) {
         events.push({
           id: "evt_" + eventIdx++,
           label: label,
           start: startDate,
           end: endDate,
-          raw: match[0]
+          raw: match[0],
+          weight: scoreData.weight,
+          typography: scoreData.typography
         });
+      } else if (scoreData.weight > (existing.weight || 0)) {
+        existing.weight = scoreData.weight;
+        existing.typography = scoreData.typography;
+        existing.label = label;
       }
     }
   }
@@ -2265,6 +2446,7 @@ function extractDatesFromMetadata(pageData) {
 
       let hour = match[4] ? parseInt(match[4], 10) : null;
       let minute = match[5] ? parseInt(match[5], 10) : 0;
+      const hasExplicitHour = (match[4] !== undefined);
 
       if (hour === null) {
         const lookahead = text.substring(match.index + match[0].length, match.index + match[0].length + 30);
@@ -2279,14 +2461,23 @@ function extractDatesFromMetadata(pageData) {
 
       const startDate = new Date(year, month - 1, day, hour, minute);
       const endDate = new Date(year, month - 1, day, hour + 2, minute);
-      if (!events.some((e) => e.start.getTime() === startDate.getTime())) {
+      const scoreData = calculateEventWeight(match[0], day, null, pageData.domDateCandidates, hasSelection, hasExplicitHour);
+      const label = match[0].trim();
+      const existing = events.find((e) => e.start.getTime() === startDate.getTime());
+      if (!existing) {
         events.push({
           id: "evt_" + eventIdx++,
-          label: match[0].trim(),
+          label: label,
           start: startDate,
           end: endDate,
-          raw: match[0]
+          raw: match[0],
+          weight: scoreData.weight,
+          typography: scoreData.typography
         });
+      } else if (scoreData.weight > (existing.weight || 0)) {
+        existing.weight = scoreData.weight;
+        existing.typography = scoreData.typography;
+        existing.label = label;
       }
     }
   }
@@ -2297,23 +2488,39 @@ function extractDatesFromMetadata(pageData) {
     const day = parseInt(match[3], 10);
     let hour = match[4] ? parseInt(match[4], 10) : 20;
     let minute = match[5] ? parseInt(match[5], 10) : 0;
+    const hasExplicitHour = (match[4] !== undefined);
 
     if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
       const startDate = new Date(year, month - 1, day, hour, minute);
       const endDate = new Date(year, month - 1, day, hour + 2, minute);
-      if (!events.some((e) => e.start.getTime() === startDate.getTime())) {
+      const scoreData = calculateEventWeight(match[0], day, null, pageData.domDateCandidates, hasSelection, hasExplicitHour);
+      const label = match[0].trim();
+      const existing = events.find((e) => e.start.getTime() === startDate.getTime());
+      if (!existing) {
         events.push({
           id: "evt_" + eventIdx++,
-          label: match[0].trim(),
+          label: label,
           start: startDate,
           end: endDate,
-          raw: match[0]
+          raw: match[0],
+          weight: scoreData.weight,
+          typography: scoreData.typography
         });
+      } else if (scoreData.weight > (existing.weight || 0)) {
+        existing.weight = scoreData.weight;
+        existing.typography = scoreData.typography;
+        existing.label = label;
       }
     }
   }
 
-  events.sort((a, b) => a.start.getTime() - b.start.getTime());
+  // Sort primarily by weight (highest probability first), and secondarily by start time
+  events.sort((a, b) => {
+    const diff = (b.weight || 0) - (a.weight || 0);
+    if (diff !== 0) return diff;
+    return a.start.getTime() - b.start.getTime();
+  });
+
   return events.slice(0, 15);
 }
 
@@ -2348,7 +2555,7 @@ function renderDetectedDates() {
   openSelectedBtn.disabled = false;
   container.innerHTML = "";
 
-  detectedEvents.forEach((evt) => {
+  detectedEvents.forEach((evt, idx) => {
     const item = document.createElement("div");
     item.className = "d-flex align-items-center justify-content-between p-2 border-bottom";
 
@@ -2364,11 +2571,30 @@ function renderDetectedDates() {
 
     const sessionBadge = evt.sessionName ? `<span class="badge bg-light text-primary border ms-1">${escapeHtml(evt.sessionName)}</span>` : "";
 
+    let topBadge = "";
+    if (idx === 0 && (evt.weight === undefined || evt.weight >= 60)) {
+      topBadge = `<span class="badge bg-primary-subtle text-primary border border-primary-subtle ms-1" style="font-size: 0.65rem;" title="Top probability match">Top match</span>`;
+    }
+
+    let typoTooltip = "";
+    if (evt.typography) {
+      const parts = [];
+      if (evt.typography.tag) parts.push(`tag: <${evt.typography.tag}>`);
+      if (evt.typography.fontSize) parts.push(`size: ${evt.typography.fontSize}px`);
+      if (evt.typography.isBold) parts.push("bold");
+      if (evt.weight !== undefined) parts.push(`score: ${evt.weight}`);
+      typoTooltip = parts.join(", ");
+    } else if (evt.weight !== undefined) {
+      typoTooltip = `score: ${evt.weight}`;
+    }
+
+    const isChecked = (evt.weight === undefined || evt.weight >= 20);
+
     item.innerHTML = `
-      <div class="form-check d-flex align-items-center gap-2 mb-0">
-        <input class="form-check-input evt-checkbox" type="checkbox" value="${evt.id}" id="chk-${evt.id}" checked>
+      <div class="form-check d-flex align-items-center gap-2 mb-0" title="${escapeHtml(typoTooltip)}">
+        <input class="form-check-input evt-checkbox" type="checkbox" value="${evt.id}" id="chk-${evt.id}" ${isChecked ? "checked" : ""}>
         <label class="form-check-label small cursor-pointer" for="chk-${evt.id}">
-          <span class="fw-semibold">${formattedDate}</span> <span class="text-muted">(${timeDisplay})</span>${sessionBadge}
+          <span class="fw-semibold">${formattedDate}</span> <span class="text-muted">(${timeDisplay})</span>${sessionBadge}${topBadge}
         </label>
       </div>
       <button class="btn btn-sm btn-outline-primary py-0 px-2 btn-single-gcal" style="font-size: 0.75rem;">
