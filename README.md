@@ -6,13 +6,19 @@ A lightweight, standalone Chrome Extension (Manifest V3) acting as your web mult
 
 ## Features
 
-### 1. FIP Radio Live & Metadata
+### 1. Concert & Event Date Extractor (Scheduler Assistant / Google Calendar)
+* **AI-Powered & Regex Smart Scanning:** Scans the active web page, flyer/poster images, or highlighted text using Gemini AI or pattern recognition to detect French and international date formats, intervals, and exact time slots.
+* **Intelligent Event Categorization:** Automatically recognizes event nature (Concert, Theatre, Dance, Workshop/Stage, Exhibition, Festival) and formats clean, standardized event titles and venues.
+* **Interactive Scheduling Checklist:** Review detected dates with individual checkboxes, adjust title, location, or notes, and pick your target Google Calendar.
+* **1-Click Google Calendar Scheduling:** Generates direct event creation links in new tabs without requiring OAuth or complex Google API credential setup.
+
+### 2. FIP Radio Live & Metadata
 * **Live Track Detection:** Automatically fetches current song title, artist, album, year, and cover art from Radio France live feeds.
 * **Instant Search Links:** Direct 1-click links to YouTube, Discogs, Spotify, Wikipedia, and Bandcamp.
 * **Integrated Web Stream Player:** Listen to FIP directly inside the extension popup.
 * **Quick Rate & Save:** Assign 1-5 stars, custom tags (e.g. jazz, chill, groove), and notes before adding to your global library.
 
-### 2. Universal Music Library (Multi-Source & System-Independent)
+### 3. Universal Music Library (Multi-Source & System-Independent)
 * **Multi-Origin Support:** Tracks can come from FIP, manual entry, web text selection, radio, Spotify, vinyl, etc.
 * **Rating & Tagging:** Interactive 1-5 star rating system and flexible comma-separated tags (#jazz, #favorite, #live).
 * **Real-time Filtering & Search:** Search across title, artist, album, tags, and notes with instant dropdown filters for Origin, Minimum Rating, and Tags.
@@ -20,11 +26,6 @@ A lightweight, standalone Chrome Extension (Manifest V3) acting as your web mult
   * **Export JSON:** Full structured data backup.
   * **Export CSV:** Easy import into Excel or spreadsheet software.
   * **Import JSON:** Merge or restore saved tracks anytime.
-
-### 3. Concert & Event Date Extractor (Google Calendar)
-* **Smart Date Extraction:** Scans current web page or highlighted selection to detect French and standard date formats (e.g., 15 octobre 2026, du 12 au 15 nov, 20h30, 15/10/2026).
-* **Interactive Checklist:** Review detected dates with checkboxes and customize Event Title, Venue/Location, and Calendar prefix (e.g., [Interesting]).
-* **Direct Google Calendar Creation:** Generates direct event creation links in new tabs without requiring OAuth or Google API credentials setup.
 
 ### 4. BnF Remote Access (Proxy)
 * **1-Click BnF Redirection:** Rewrites active tab URL to route through your Bibliotheque nationale de France (BnF) subscriber proxy (https://bnf.idm.oclc.org/login?url=...).
