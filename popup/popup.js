@@ -1022,14 +1022,33 @@ function setupEventsModule() {
 
   if (geminiSaveKeyBtn) {
     geminiSaveKeyBtn.addEventListener("click", () => {
-      const keyVal = geminiKeyInput.value.trim();
+      const keyVal = geminiKeyInput ? geminiKeyInput.value.trim() : "";
       chrome.storage.local.set({ geminiApiKey: keyVal }, () => {
         updateGeminiStatusBadge(keyVal);
+        geminiSaveKeyBtn.textContent = "Saved!";
+        geminiSaveKeyBtn.classList.replace("btn-outline-primary", "btn-success");
         if (geminiSavedMsg) {
           geminiSavedMsg.classList.remove("d-none");
-          setTimeout(() => geminiSavedMsg.classList.add("d-none"), 2000);
         }
+        setTimeout(() => {
+          geminiSaveKeyBtn.textContent = "Save";
+          geminiSaveKeyBtn.classList.replace("btn-success", "btn-outline-primary");
+          if (geminiSavedMsg) {
+            geminiSavedMsg.classList.add("d-none");
+          }
+        }, 2000);
       });
+    });
+  }
+
+  if (geminiKeyInput) {
+    geminiKeyInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (geminiSaveKeyBtn) {
+          geminiSaveKeyBtn.click();
+        }
+      }
     });
   }
 
@@ -2104,7 +2123,6 @@ function runSmartPageExtractor(forceIgnoreSelection = false) {
   // 9. Scan DOM for date elements with typographic and hierarchy weights
   const domDateCandidates = [];
   const dateScanRegex = /(?:(?:du\s+)?\d{1,2}\s+(?:au\s+\d{1,2}\s+)?[a-zA-Z\u00C0-\u017F]+(?:\s+\d{4})?|\b\d{1,2}[\/\.-]\d{1,2}(?:[\/\.-]\d{2,4})?|\b\d{4}[-\/]\d{1,2}[-\/]\d{1,2})/i;
-  const h1El = document.querySelector("h1");
   const mainHeaderEl = document.querySelector("header, [class*='header'], [class*='hero'], [class*='banner'], [class*='cover']");
 
   try {
