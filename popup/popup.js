@@ -137,6 +137,19 @@ async function initStandaloneWindowMode() {
       await chrome.storage.local.set({ alwaysOpenAsWindow: e.target.checked });
     });
   }
+
+  const closeBtn = document.getElementById('btn-close-app');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => {
+      window.close();
+    });
+  }
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !document.querySelector('.modal.show')) {
+      window.close();
+    }
+  });
 }
 
 async function openStandaloneWindow() {
