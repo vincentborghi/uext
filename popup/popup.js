@@ -164,6 +164,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   await loadActiveTabInfo();
+  await refreshCalendarExtractionFromTab();
   await refreshFipLive();
   await loadLibrary();
 });
@@ -314,10 +315,10 @@ function setupNavigation() {
     });
   });
 
-  // Restore the last active tab
-  chrome.storage.local.get({ lastActiveTab: '#tab-fip' }, (res) => {
-    const lastTabTarget = res.lastActiveTab || '#tab-fip';
-    if (lastTabTarget && lastTabTarget !== '#tab-fip') {
+  // Restore the last active tab (default: #tab-events)
+  chrome.storage.local.get({ lastActiveTab: '#tab-events' }, (res) => {
+    const lastTabTarget = res.lastActiveTab || '#tab-events';
+    if (lastTabTarget && lastTabTarget !== '#tab-events') {
       const targetBtn = document.querySelector(`#nav-tabs button[data-bs-target="${lastTabTarget}"]`);
       if (targetBtn) {
         if (window.bootstrap && window.bootstrap.Tab) {

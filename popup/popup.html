@@ -29,14 +29,14 @@
 
     <!-- Main Navigation Tabs -->
     <nav class="nav nav-pills nav-fill px-2 py-2 bg-white border-bottom small" id="nav-tabs" role="tablist">
-      <button class="nav-link active py-1" id="tab-fip-btn" data-bs-toggle="pill" data-bs-target="#tab-fip" type="button" role="tab">
+      <button class="nav-link active py-1" id="tab-events-btn" data-bs-toggle="pill" data-bs-target="#tab-events" type="button" role="tab">
+        Schedule Event
+      </button>
+      <button class="nav-link py-1" id="tab-fip-btn" data-bs-toggle="pill" data-bs-target="#tab-fip" type="button" role="tab">
         FIP Live
       </button>
       <button class="nav-link py-1" id="tab-library-btn" data-bs-toggle="pill" data-bs-target="#tab-library" type="button" role="tab">
         Library <span id="library-count-badge" class="badge bg-secondary ms-1">0</span>
-      </button>
-      <button class="nav-link py-1" id="tab-events-btn" data-bs-toggle="pill" data-bs-target="#tab-events" type="button" role="tab">
-        Calendar
       </button>
       <button class="nav-link py-1" id="tab-bnf-btn" data-bs-toggle="pill" data-bs-target="#tab-bnf" type="button" role="tab">
         BnF Proxy
@@ -46,8 +46,163 @@
     <!-- Tab Contents -->
     <main class="tab-content p-3 overflow-auto main-view">
       
-      <!-- ==================== TAB 1: FIP LIVE ==================== -->
-      <section class="tab-pane fade show active" id="tab-fip" role="tabpanel">
+      <!-- ==================== TAB 1: SCHEDULE EVENT ==================== -->
+      <section class="tab-pane fade show active" id="tab-events" role="tabpanel">
+        <div class="card shadow-sm mb-3">
+          <div class="card-body p-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <h2 class="h6 mb-0 fw-bold">Page Date Extractor</h2>
+              <div class="d-flex gap-1">
+                <button id="events-ai-scan-btn" class="btn btn-sm btn-primary py-1 px-2 fw-semibold" title="Analyze with Google Gemini AI">
+                  AI Smart Scan
+                </button>
+                <button id="events-scan-tab-btn" class="btn btn-sm btn-outline-secondary py-1 px-2" title="Fast local regex & JSON-LD scan">
+                  Fast Scan
+                </button>
+              </div>
+            </div>
+
+            <!-- Active Text Selection Focus Banner -->
+            <div id="selection-focus-banner" class="alert alert-info py-1 px-2 mb-2 d-none" style="font-size: 0.74rem;">
+              <div class="d-flex justify-content-between align-items-center">
+                <div>
+                  <span class="badge bg-primary me-1">Selection</span>
+                  <span>Focused on text selection (<span id="selection-char-count">0</span> chars)</span>
+                </div>
+                <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none fw-semibold" id="btn-scan-full-page" title="Scan entire page instead" style="font-size: 0.72rem;">
+                  Scan full page
+                </button>
+              </div>
+            </div>
+
+            <!-- Gemini API Key Accordion / Configuration -->
+            <div class="mb-2">
+              <div class="d-flex justify-content-between align-items-center">
+                <a class="small text-decoration-none cursor-pointer" data-bs-toggle="collapse" href="#gemini-settings-collapse" role="button">
+                  Google Gemini AI Settings
+                </a>
+                <span id="gemini-status-badge" class="badge bg-secondary" style="font-size: 0.68rem;">Key not configured</span>
+              </div>
+              <div class="collapse mt-2" id="gemini-settings-collapse">
+                <div class="p-2 border rounded bg-white">
+                  <div class="row g-2 align-items-center mb-1">
+                    <label class="col-sm-3 col-form-label col-form-label-sm fw-semibold" for="gemini-api-key-input">Gemini API Key</label>
+                    <div class="col-sm-9">
+                      <div class="input-group input-group-sm">
+                        <input type="password" id="gemini-api-key-input" class="form-control form-control-sm" placeholder="Paste your AIzaSy... key here">
+                        <button type="button" class="btn btn-outline-primary" id="gemini-save-key-btn">Save</button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="row g-2">
+                    <div class="col-sm-9 offset-sm-3 d-flex justify-content-between align-items-center">
+                      <span id="gemini-key-saved-msg" class="small text-success d-none">Saved!</span>
+                      <a href="https://aistudio.google.com/app/apikey" target="_blank" class="small text-muted" style="font-size:0.7rem;">Get free API key on Google AI Studio &rarr;</a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- AI Live Trace / Debug Log Box -->
+            <div class="mb-2">
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <div class="form-check form-switch mb-0">
+                  <input class="form-check-input" type="checkbox" id="ai-debug-toggle">
+                  <label class="form-check-label small fw-semibold text-secondary cursor-pointer" for="ai-debug-toggle">
+                    Show Live Trace / Debug Log
+                  </label>
+                </div>
+                <button class="btn btn-sm btn-link p-0 text-decoration-none text-muted d-none" id="ai-debug-clear-btn" style="font-size: 0.68rem;">Clear</button>
+              </div>
+              <div id="ai-debug-log-container" class="border rounded bg-dark p-2 d-none" style="max-height: 130px; overflow-y: auto; font-family: monospace; font-size: 0.70rem; color: #a3e635; line-height: 1.35;">
+                <div id="ai-debug-log-content">Waiting for AI request...</div>
+              </div>
+            </div>
+
+            <div class="row g-2 align-items-center mb-2">
+              <label class="col-sm-3 col-form-label col-form-label-sm fw-semibold" for="event-input-title">Event Title</label>
+              <div class="col-sm-9">
+                <input type="text" id="event-input-title" class="form-control form-control-sm" placeholder="e.g. Rodolphe Burger / Fontaine">
+              </div>
+            </div>
+
+            <div class="row g-2 align-items-center mb-2">
+              <label class="col-sm-3 col-form-label col-form-label-sm fw-semibold" for="event-input-location">Location / Venue</label>
+              <div class="col-sm-9">
+                <input type="text" id="event-input-location" class="form-control form-control-sm" placeholder="e.g. Fontaine (La Source - Grande Salle)">
+              </div>
+            </div>
+
+            <div class="row g-2 align-items-center mb-1">
+              <label class="col-sm-3 col-form-label col-form-label-sm fw-semibold" for="event-input-calendar" title="Target calendar ID or name">Target Calendar</label>
+              <div class="col-sm-9">
+                <input type="text" id="event-input-calendar" class="form-control form-control-sm" placeholder="e.g. c_xxxxxx@group.calendar.google.com or Interesting">
+              </div>
+            </div>
+            <div class="row g-2 mb-2">
+              <div class="col-sm-9 offset-sm-3">
+                <div class="form-text text-muted mt-0" style="font-size: 0.68rem;">
+                  Google Calendar ID (ex: <code>c_xxxx@group.calendar.google.com</code>) to automatically select your secondary agenda.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Extracted Dates List -->
+        <div class="card shadow-sm">
+          <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center gap-2">
+              <h3 class="h6 mb-0 fw-semibold">Detected Dates</h3>
+              <button id="btn-toggle-manual-date" class="btn btn-sm btn-outline-primary py-0 px-2" style="font-size: 0.72rem;" title="Enter date manually">
+                + Manual Date
+              </button>
+            </div>
+            <button id="events-open-selected-btn" class="btn btn-sm btn-success py-0 px-2" disabled>
+              + Open in Calendar
+            </button>
+          </div>
+          <div class="card-body p-2">
+            <!-- Manual Date Input Box -->
+            <div id="manual-date-container" class="border rounded p-2 mb-2 bg-light d-none">
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="small fw-semibold text-secondary" style="font-size: 0.72rem;">Manual Date Entry</span>
+                <button type="button" class="btn-close" id="btn-close-manual-date" style="font-size: 0.60rem;" aria-label="Close"></button>
+              </div>
+              <div class="row g-2 align-items-center mb-1">
+                <label class="col-sm-3 col-form-label col-form-label-sm text-muted" for="manual-date-input">Date &amp; Time</label>
+                <div class="col-sm-4">
+                  <input type="date" id="manual-date-input" class="form-control form-control-sm py-1">
+                </div>
+                <div class="col-sm-2">
+                  <input type="time" id="manual-time-input" class="form-control form-control-sm py-1" value="20:00">
+                </div>
+                <div class="col-sm-3 d-flex justify-content-end gap-1">
+                  <button id="btn-add-manual-date" class="btn btn-sm btn-primary py-1 px-2" style="font-size: 0.75rem;">+ Add</button>
+                  <button id="btn-add-open-manual-date" class="btn btn-sm btn-success py-1 px-2" style="font-size: 0.75rem;">Add &amp; Open</button>
+                </div>
+              </div>
+              <div class="row g-2 align-items-center mb-1">
+                <label class="col-sm-3 col-form-label col-form-label-sm text-muted" for="manual-text-input">Free Text Date</label>
+                <div class="col-sm-9">
+                  <input type="text" id="manual-text-input" class="form-control form-control-sm py-1" placeholder="e.g. 16/10/2026 20h30 or 16 oct 2026">
+                </div>
+              </div>
+              <div id="manual-date-error" class="text-danger small mt-1 d-none" style="font-size: 0.72rem;"></div>
+            </div>
+
+            <div id="events-list-container">
+              <div class="text-muted small text-center py-3" id="events-empty-msg">
+                Click "AI Smart Scan" or select text on a website to extract dates.
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== TAB 2: FIP LIVE ==================== -->
+      <section class="tab-pane fade" id="tab-fip" role="tabpanel">
         <div class="card shadow-sm mb-3">
           <div class="card-body p-3">
             <!-- Station Selector Row -->
@@ -199,161 +354,6 @@
         </div>
         <div id="library-empty-msg" class="text-center py-4 text-muted small d-none">
           No tracks saved yet or no match for search criteria.
-        </div>
-      </section>
-
-      <!-- ==================== TAB 3: SPECTACLES & CALENDAR ==================== -->
-      <section class="tab-pane fade" id="tab-events" role="tabpanel">
-        <div class="card shadow-sm mb-3">
-          <div class="card-body p-3">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <h2 class="h6 mb-0 fw-bold">Page Date Extractor</h2>
-              <div class="d-flex gap-1">
-                <button id="events-ai-scan-btn" class="btn btn-sm btn-primary py-1 px-2 fw-semibold" title="Analyze with Google Gemini AI">
-                  AI Smart Scan
-                </button>
-                <button id="events-scan-tab-btn" class="btn btn-sm btn-outline-secondary py-1 px-2" title="Fast local regex & JSON-LD scan">
-                  Fast Scan
-                </button>
-              </div>
-            </div>
-
-            <!-- Active Text Selection Focus Banner -->
-            <div id="selection-focus-banner" class="alert alert-info py-1 px-2 mb-2 d-none" style="font-size: 0.74rem;">
-              <div class="d-flex justify-content-between align-items-center">
-                <div>
-                  <span class="badge bg-primary me-1">Selection</span>
-                  <span>Focused on text selection (<span id="selection-char-count">0</span> chars)</span>
-                </div>
-                <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none fw-semibold" id="btn-scan-full-page" title="Scan entire page instead" style="font-size: 0.72rem;">
-                  Scan full page
-                </button>
-              </div>
-            </div>
-
-            <!-- Gemini API Key Accordion / Configuration -->
-            <div class="mb-2">
-              <div class="d-flex justify-content-between align-items-center">
-                <a class="small text-decoration-none cursor-pointer" data-bs-toggle="collapse" href="#gemini-settings-collapse" role="button">
-                  Google Gemini AI Settings
-                </a>
-                <span id="gemini-status-badge" class="badge bg-secondary" style="font-size: 0.68rem;">Key not configured</span>
-              </div>
-              <div class="collapse mt-2" id="gemini-settings-collapse">
-                <div class="p-2 border rounded bg-white">
-                  <div class="row g-2 align-items-center mb-1">
-                    <label class="col-sm-3 col-form-label col-form-label-sm fw-semibold" for="gemini-api-key-input">Gemini API Key</label>
-                    <div class="col-sm-9">
-                      <div class="input-group input-group-sm">
-                        <input type="password" id="gemini-api-key-input" class="form-control form-control-sm" placeholder="Paste your AIzaSy... key here">
-                        <button type="button" class="btn btn-outline-primary" id="gemini-save-key-btn">Save</button>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="row g-2">
-                    <div class="col-sm-9 offset-sm-3 d-flex justify-content-between align-items-center">
-                      <span id="gemini-key-saved-msg" class="small text-success d-none">Saved!</span>
-                      <a href="https://aistudio.google.com/app/apikey" target="_blank" class="small text-muted" style="font-size:0.7rem;">Get free API key on Google AI Studio &rarr;</a>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- AI Live Trace / Debug Log Box -->
-            <div class="mb-2">
-              <div class="d-flex justify-content-between align-items-center mb-1">
-                <div class="form-check form-switch mb-0">
-                  <input class="form-check-input" type="checkbox" id="ai-debug-toggle">
-                  <label class="form-check-label small fw-semibold text-secondary cursor-pointer" for="ai-debug-toggle">
-                    Show Live Trace / Debug Log
-                  </label>
-                </div>
-                <button class="btn btn-sm btn-link p-0 text-decoration-none text-muted d-none" id="ai-debug-clear-btn" style="font-size: 0.68rem;">Clear</button>
-              </div>
-              <div id="ai-debug-log-container" class="border rounded bg-dark p-2 d-none" style="max-height: 130px; overflow-y: auto; font-family: monospace; font-size: 0.70rem; color: #a3e635; line-height: 1.35;">
-                <div id="ai-debug-log-content">Waiting for AI request...</div>
-              </div>
-            </div>
-
-            <div class="row g-2 align-items-center mb-2">
-              <label class="col-sm-3 col-form-label col-form-label-sm fw-semibold" for="event-input-title">Event Title</label>
-              <div class="col-sm-9">
-                <input type="text" id="event-input-title" class="form-control form-control-sm" placeholder="e.g. Rodolphe Burger / Fontaine">
-              </div>
-            </div>
-
-            <div class="row g-2 align-items-center mb-2">
-              <label class="col-sm-3 col-form-label col-form-label-sm fw-semibold" for="event-input-location">Location / Venue</label>
-              <div class="col-sm-9">
-                <input type="text" id="event-input-location" class="form-control form-control-sm" placeholder="e.g. Fontaine (La Source - Grande Salle)">
-              </div>
-            </div>
-
-            <div class="row g-2 align-items-center mb-1">
-              <label class="col-sm-3 col-form-label col-form-label-sm fw-semibold" for="event-input-calendar" title="Target calendar ID or name">Target Calendar</label>
-              <div class="col-sm-9">
-                <input type="text" id="event-input-calendar" class="form-control form-control-sm" placeholder="e.g. c_xxxxxx@group.calendar.google.com or Interesting">
-              </div>
-            </div>
-            <div class="row g-2 mb-2">
-              <div class="col-sm-9 offset-sm-3">
-                <div class="form-text text-muted mt-0" style="font-size: 0.68rem;">
-                  Google Calendar ID (ex: <code>c_xxxx@group.calendar.google.com</code>) to automatically select your secondary agenda.
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Extracted Dates List -->
-        <div class="card shadow-sm">
-          <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
-            <div class="d-flex align-items-center gap-2">
-              <h3 class="h6 mb-0 fw-semibold">Detected Dates</h3>
-              <button id="btn-toggle-manual-date" class="btn btn-sm btn-outline-primary py-0 px-2" style="font-size: 0.72rem;" title="Enter date manually">
-                + Manual Date
-              </button>
-            </div>
-            <button id="events-open-selected-btn" class="btn btn-sm btn-success py-0 px-2" disabled>
-              + Open in Calendar
-            </button>
-          </div>
-          <div class="card-body p-2">
-            <!-- Manual Date Input Box -->
-            <div id="manual-date-container" class="border rounded p-2 mb-2 bg-light d-none">
-              <div class="d-flex justify-content-between align-items-center mb-1">
-                <span class="small fw-semibold text-secondary" style="font-size: 0.72rem;">Manual Date Entry</span>
-                <button type="button" class="btn-close" id="btn-close-manual-date" style="font-size: 0.60rem;" aria-label="Close"></button>
-              </div>
-              <div class="row g-2 align-items-center mb-1">
-                <label class="col-sm-3 col-form-label col-form-label-sm text-muted" for="manual-date-input">Date &amp; Time</label>
-                <div class="col-sm-4">
-                  <input type="date" id="manual-date-input" class="form-control form-control-sm py-1">
-                </div>
-                <div class="col-sm-2">
-                  <input type="time" id="manual-time-input" class="form-control form-control-sm py-1" value="20:00">
-                </div>
-                <div class="col-sm-3 d-flex justify-content-end gap-1">
-                  <button id="btn-add-manual-date" class="btn btn-sm btn-primary py-1 px-2" style="font-size: 0.75rem;">+ Add</button>
-                  <button id="btn-add-open-manual-date" class="btn btn-sm btn-success py-1 px-2" style="font-size: 0.75rem;">Add &amp; Open</button>
-                </div>
-              </div>
-              <div class="row g-2 align-items-center mb-1">
-                <label class="col-sm-3 col-form-label col-form-label-sm text-muted" for="manual-text-input">Free Text Date</label>
-                <div class="col-sm-9">
-                  <input type="text" id="manual-text-input" class="form-control form-control-sm py-1" placeholder="e.g. 16/10/2026 20h30 or 16 oct 2026">
-                </div>
-              </div>
-              <div id="manual-date-error" class="text-danger small mt-1 d-none" style="font-size: 0.72rem;"></div>
-            </div>
-
-            <div id="events-list-container">
-              <div class="text-muted small text-center py-3" id="events-empty-msg">
-                Click "AI Smart Scan" or select text on a website to extract dates.
-              </div>
-            </div>
-          </div>
         </div>
       </section>
 
