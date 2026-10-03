@@ -40,8 +40,13 @@ A lightweight, standalone Chrome Extension (Manifest V3) acting as your web mult
 
 ## How to Install in Chrome
 
-1. Open Google Chrome and go to chrome://extensions/
-2. Enable **Developer mode** (toggle in the top right corner).
-3. Click on **Load unpacked** (Charger l\'extension non empaquetee).
-4. Select the project folder: the project folder where this repository was cloned (containing manifest.json)
-5. Pin the **My Extras** icon to your Chrome toolbar.
+### Step 1: Download & Extract
+1. On this GitHub repository page, click the green **Code** button and choose **Download ZIP** (or clone via `git clone https://github.com/vincentborghi/uext.git`).
+2. Locate the downloaded ZIP file (e.g. `uext-main.zip`), right-click it, and choose **Extract All...** (Extraire tout...).
+
+### Step 2: Load into Google Chrome
+1. Open Google Chrome and navigate to `chrome://extensions/`.
+2. Enable **Developer mode** using the toggle switch in the top right corner.
+3. Click the **Load unpacked** button (Charger l\'extension non empaquetee) in the top left.
+4. Select the extracted folder containing `manifest.json` (typically `uext-main`).
+5. Pin the **My Extras** icon to your Chrome toolbar for convenient 1-click access.
