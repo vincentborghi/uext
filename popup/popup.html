@@ -75,16 +75,44 @@
               </div>
             </div>
 
-            <!-- Gemini API Key Accordion / Configuration -->
+            <!-- Grouped Event Info: Title & Venue -->
+            <div class="p-2 mb-2 bg-light border rounded">
+              <div class="row g-2 align-items-center mb-2">
+                <label class="col-sm-3 col-form-label col-form-label-sm fw-bold text-dark" for="event-input-title">Event Title</label>
+                <div class="col-sm-9">
+                  <input type="text" id="event-input-title" class="form-control form-control-sm bg-white fw-semibold text-primary" placeholder="e.g. Rodolphe Burger / Fontaine">
+                </div>
+              </div>
+              <div class="row g-2 align-items-center">
+                <label class="col-sm-3 col-form-label col-form-label-sm fw-bold text-dark" for="event-input-location">Location / Venue</label>
+                <div class="col-sm-9">
+                  <input type="text" id="event-input-location" class="form-control form-control-sm bg-white" placeholder="e.g. Fontaine (La Source - Grande Salle)">
+                </div>
+              </div>
+            </div>
+
+            <!-- Settings Accordion (Target Calendar & Gemini AI) -->
             <div class="mb-2">
               <div class="d-flex justify-content-between align-items-center">
                 <a class="small text-decoration-none cursor-pointer" data-bs-toggle="collapse" href="#gemini-settings-collapse" role="button">
-                  Google Gemini AI Settings
+                  Settings (Target Calendar &amp; AI)
                 </a>
                 <span id="gemini-status-badge" class="badge bg-secondary" style="font-size: 0.68rem;">Key not configured</span>
               </div>
               <div class="collapse mt-2" id="gemini-settings-collapse">
                 <div class="p-2 border rounded bg-white">
+                  <!-- Target Calendar -->
+                  <div class="row g-2 align-items-center mb-2 pb-2 border-bottom">
+                    <label class="col-sm-3 col-form-label col-form-label-sm fw-semibold" for="event-input-calendar" title="Target calendar ID or name">Target Calendar</label>
+                    <div class="col-sm-9">
+                      <input type="text" id="event-input-calendar" class="form-control form-control-sm" placeholder="e.g. c_xxxxxx@group.calendar.google.com or Interesting">
+                      <div class="form-text text-muted mt-1" style="font-size: 0.68rem;">
+                        Google Calendar ID (ex: <code>c_xxxx@group.calendar.google.com</code>) to automatically select your secondary agenda.
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Gemini API Key -->
                   <div class="row g-2 align-items-center mb-1">
                     <label class="col-sm-3 col-form-label col-form-label-sm fw-semibold" for="gemini-api-key-input">Gemini API Key</label>
                     <div class="col-sm-9">
@@ -105,7 +133,7 @@
             </div>
 
             <!-- AI Live Trace / Debug Log Box -->
-            <div class="mb-2">
+            <div class="mb-0">
               <div class="d-flex justify-content-between align-items-center mb-1">
                 <div class="form-check form-switch mb-0">
                   <input class="form-check-input" type="checkbox" id="ai-debug-toggle">
@@ -117,34 +145,6 @@
               </div>
               <div id="ai-debug-log-container" class="border rounded bg-dark p-2 d-none" style="max-height: 130px; overflow-y: auto; font-family: monospace; font-size: 0.70rem; color: #a3e635; line-height: 1.35;">
                 <div id="ai-debug-log-content">Waiting for AI request...</div>
-              </div>
-            </div>
-
-            <div class="row g-2 align-items-center mb-2">
-              <label class="col-sm-3 col-form-label col-form-label-sm fw-semibold" for="event-input-title">Event Title</label>
-              <div class="col-sm-9">
-                <input type="text" id="event-input-title" class="form-control form-control-sm" placeholder="e.g. Rodolphe Burger / Fontaine">
-              </div>
-            </div>
-
-            <div class="row g-2 align-items-center mb-2">
-              <label class="col-sm-3 col-form-label col-form-label-sm fw-semibold" for="event-input-location">Location / Venue</label>
-              <div class="col-sm-9">
-                <input type="text" id="event-input-location" class="form-control form-control-sm" placeholder="e.g. Fontaine (La Source - Grande Salle)">
-              </div>
-            </div>
-
-            <div class="row g-2 align-items-center mb-1">
-              <label class="col-sm-3 col-form-label col-form-label-sm fw-semibold" for="event-input-calendar" title="Target calendar ID or name">Target Calendar</label>
-              <div class="col-sm-9">
-                <input type="text" id="event-input-calendar" class="form-control form-control-sm" placeholder="e.g. c_xxxxxx@group.calendar.google.com or Interesting">
-              </div>
-            </div>
-            <div class="row g-2 mb-2">
-              <div class="col-sm-9 offset-sm-3">
-                <div class="form-text text-muted mt-0" style="font-size: 0.68rem;">
-                  Google Calendar ID (ex: <code>c_xxxx@group.calendar.google.com</code>) to automatically select your secondary agenda.
-                </div>
               </div>
             </div>
           </div>
